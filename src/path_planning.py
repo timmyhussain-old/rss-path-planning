@@ -57,58 +57,59 @@ class PathPlan(object):
                 path.append(position)
                 position = came_from[position]
                 position.append(start)
+            return path
 
-            # getting the width and height 
-            W = len(ground_map[0])
-            H = len(ground_map) 
+        # getting the width and height 
+        W = len(ground_map[0])
+        H = len(ground_map) 
 
-            # initializing all my sets
-            open_set = set()
-            open_set.add(start)
-            closed_set = set()
-            came_from = {start:None}
-            g_score = {start:0}
-            f_score = {start:heuristic(start)}
-            rev_f_score = {heuristic(start):start} # just for efficiency... we can fix this later
-            all_neighbors = {}
+        # initializing all my sets
+        open_set = set()
+        open_set.add(start)
+        closed_set = set()
+        came_from = {start:None}
+        g_score = {start:0}
+        f_score = {start:heuristic(start)}
+        rev_f_score = {heuristic(start):start} # just for efficiency... we can fix this later
+        all_neighbors = {}
 
-            # The main part
-            while len(open_set) > 0:
-                current = rev_f_score[min(rev_f_score)]
-                print(rev_f_score)
-                if current == goal:
-                    return build_path(came_from)
-                print(open_set)
-                print(current)
-                open_set.remove(current)
+        # The main part
+        while len(open_set) > 0:
+            current = rev_f_score[min(rev_f_score)]
+            print(rev_f_score)
+            if current == goal:
+                return build_path(came_from)
+            print(open_set)
+            print(current)
+            open_set.remove(current)
 
-                # Get the neigbnors if they are not already in the `neighbors` dictionary
-                neighbors = []
-                if current not in all_neighbors:
-                    # This just looks bad, but it's OK for now
-                    if current[0]+1 <= H-1:
-                        neighbors.append((current[0]+1, current[1]))
-                    if current[0]-1 >= 0:  
-                        neighbors.append((current[0]-1, current[1]))
-                    if current[1]+1 <= W-1:
-                        neighbors.append((current[0], current[1]+1))
-                    if current[1]-1 >= 0:
-                        neighbors.append((current[0], current[1]-1))
-                    # we will ignore diagonals for now
-                    all_neighbors[current] = neighbors[:]
-                else:
-                    neighbors = all_neighbors[current][:]
+            # Get the neigbnors if they are not already in the `neighbors` dictionary
+            neighbors = []
+            if current not in all_neighbors:
+                # This just looks bad, but it's OK for now
+                if current[0]+1 <= H-1:
+                    neighbors.append((current[0]+1, current[1]))
+                if current[0]-1 >= 0:  
+                    neighbors.append((current[0]-1, current[1]))
+                if current[1]+1 <= W-1:
+                    neighbors.append((current[0], current[1]+1))
+                if current[1]-1 >= 0:
+                    neighbors.append((current[0], current[1]-1))
+                # we will ignore diagonals for now
+                all_neighbors[current] = neighbors[:]
+            else:
+                neighbors = all_neighbors[current][:]
 
-                for each in neighbors:
-                    tentative_score = g_score[current] + 1
-                    if each not in g_score or (ground_map[current[0]][current[1]] < 1 and tentative_score <= g_score[each]):
-                        g_score[each] = tentative_score
-                        came_from[each] = current
-                        # optimize this part by creating an h = {} and not repeating calculations
-                        f_score[each] = g_score[current] + heuristic(each) 
-                        rev_f_score[f_score[each]] = each
-                        if each not in open_set:
-                            open_set.add(each)
+            for each in neighbors:
+                tentative_score = g_score[current] + 1
+                if each not in g_score or (ground_map[current[0]][current[1]] < 1 and tentative_score <= g_score[each]):
+                    g_score[each] = tentative_score
+                    came_from[each] = current
+                    # optimize this part by creating an h = {} and not repeating calculations
+                    f_score[each] = g_score[current] + heuristic(each) 
+                    rev_f_score[f_score[each]] = each
+                    if each not in open_set:
+                        open_set.add(each)
 
         ## CODE FOR PATH PLANNING ##
             
