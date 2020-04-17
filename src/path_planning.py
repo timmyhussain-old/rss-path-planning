@@ -37,8 +37,8 @@ class PathPlan(object):
         # TODO: dialate the path
      
         # Treat some spots as certain obstacles
-        self.map = np.where(data < 0, 100, data)
-        self.map = np.where(data > 15, 100, data)
+        self.g_map = np.where(data < 0, 100, data)
+        self.g_map = np.where(self.g_map > 15, 100, self.g_map)
         
     def odom_cb(self, msg):
         self.start_pos = (msg.pose.pose.position.x,msg.pose.pose.position.y)
