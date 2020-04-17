@@ -76,11 +76,8 @@ class PathPlan(object):
         # The main part
         while len(open_set) > 0:
             current = rev_f_score[min(rev_f_score)]
-            print(rev_f_score)
             if current == goal:
                 return build_path(came_from)
-            print(open_set)
-            print(current)
             open_set.remove(current)
 
             # Get the neigbnors if they are not already in the `neighbors` dictionary
