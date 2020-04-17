@@ -27,8 +27,6 @@ class PathPlan(object):
         self.traj_pub = rospy.Publisher("/trajectory/current", PoseArray, queue_size=10)
         self.odom_sub = rospy.Subscriber(self.odom_topic, Odometry, self.odom_cb)
        
-        self.plan_path(self.start_pos, self.goal_pos, self.g_map)
-       
 
     def map_cb(self, msg):
         data = np.array(msg.data)
@@ -43,9 +41,11 @@ class PathPlan(object):
     def odom_cb(self, msg):
         self.start_pos = (msg.pose.pose.position.x,msg.pose.pose.position.y)
 
-
     def goal_cb(self, msg):
         self.goal_pos = (msg.pose.position.x,msg.pose.position.y)
+        
+        # Only call the path planned once a goal position has been specified
+        self.plan_path(self.start_pos, self.goal_pos, self.g_map)
 
     def plan_path(self, start_position, goal_position, ground_map):
         # Making sure that we start from and end at a integer positions
