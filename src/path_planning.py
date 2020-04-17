@@ -29,7 +29,7 @@ class PathPlan(object):
        
 
     def map_cb(self, msg):
-        data = np.array(msg.data)
+        data = np.array(msg.data).reshape((msg.info.width, msg.info.height))
         # Dialating the map using scipy
         kernel = np.array([[1,1,1,1],[1,1,1,1],[1,1,1,1],[1,1,1,1]])
         # TODO: dialate the path
