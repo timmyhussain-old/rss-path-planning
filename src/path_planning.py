@@ -40,15 +40,6 @@ class PathPlan(object):
         self.map_resolution = msg.info.resolution
 
 
-
-
-     
-
-
-
-        
-     
-
         # Treat some spots as certain obstacles
         self.g_map = np.where(data < 0, 100, data)
         self.g_map = np.where(self.g_map > 15, 100, self.g_map)
@@ -138,7 +129,21 @@ class PathPlan(object):
                     neighbors.append((current[0], current[1]+1))
                 if current[1]-1 >= 0:
                     neighbors.append((current[0], current[1]-1))
-                # we will ignore diagonals for now
+                
+                # DIAGONALS
+                #Top right
+                if current[0]+1 <= H-1 and current[1]+1 <= W-1:
+                    neighbors.append((current[0]+1, current[1]+1))
+                #Top left
+                if current[0]+1 <= H-1 and current[1]-1 <= W-1:
+                    neighbors.append((current[0]+1, current[1]-1))
+                #Bottom right
+                if current[0]-1 <= H-1 and current[1]+1 <= W-1:
+                    neighbors.append((current[0]-1, current[1]+1))
+                #Bottom left
+                if current[0]-1 <= H-1 and current[1]-1 <= W-1:
+                    neighbors.append((current[0]-1, current[1]-1))
+                
                 all_neighbors[current] = neighbors[:]
             else:
                 neighbors = all_neighbors[current][:]
