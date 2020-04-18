@@ -148,7 +148,7 @@ class PathPlan(object):
             for each in neighbors:
                 tentative_score = g_score[current] + 1
                 # Treating anything with probability higher than 10 as a certain wall
-                if ground_map[current[0]][current[1]] <= 0 and (each not in g_score or tentative_score <= g_score[each]):
+                if ground_map[current[0]][current[1]] <= 10 and (each not in g_score or tentative_score <= g_score[each]):
                     g_score[each] = tentative_score
                     came_from[each] = current
                     # optimize this part by creating an h = {} and not repeating calculations
