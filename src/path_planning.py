@@ -93,26 +93,34 @@ class PathPlan(object):
         H = len(ground_map) 
 
         # initializing all my sets
-        open_queue = Queue.Queue()
-        open_queue.put(start)
+        #open_queue = Queue.Queue()
+        #open_queue.put(start)
         open_set = set()
         open_set.add(start)
         #closed_set = set() # May not need this
         came_from = {start:None}
         g_score = {start:0}
         f_score = {start:heuristic(start)}
-        rev_f_score = {heuristic(start):start} # Not using this now
+        
+        rev_f_score = {f_start:set()} # just for efficiency
+        rev_f_score[f_start].add(start)
+        
         all_neighbors = {}
         found = False
         # The main part
-        while not open_queue.empty():
-            #current = rev_f_score[min(rev_f_score)]
-            current = open_queue.get()
+        #while not open_queue.empty():
+        while len(open_set) != 0:
+            inter = open_set.intersection(rev_f_score[min(rev_f_score)])
+            current = inter.pop()
+            #current = open_queue.get()
             if current == goal:
                 build_path(came_from)
                 found = True
                 break
             open_set.remove(current)
+            rev_f_score[min(rev_f_score)].remove(current)
+            if len(rev_f_score[min(rev_f_score)]) == 0:
+                del rev_f_score[min(rev_f_score)]
 
             # Get the neigbnors if they are not already in the `neighbors` dictionary
             neighbors = []
@@ -153,10 +161,12 @@ class PathPlan(object):
                     came_from[each] = current
                     # optimize this part by creating an h = {} and not repeating calculations
                     f_score[each] = g_score[current] + heuristic(each) 
-                    rev_f_score[f_score[each]] = each
+                    if f_score[each] not in rev_f_score:
+                        rev_f_score[f_score[each]] = set()
+                    rev_f_score[f_score[each]].add(each)
                     if each not in open_set:
                         open_set.add(each)
-                        open_queue.put(each)
+                        #open_queue.put(each)
         if not found:
             rospy.loginfo("No Path found!")
             return
