@@ -3,6 +3,7 @@
 import rospy
 import numpy as np
 import scipy as sp 
+import Queue
 from geometry_msgs.msg import PoseStamped, PoseArray
 from nav_msgs.msg import Odometry, OccupancyGrid
 import rospkg
@@ -48,6 +49,7 @@ class PathPlan(object):
         self.plan_path(self.start_pos, self.goal_pos, self.g_map)
 
     def plan_path(self, start_position, goal_position, ground_map):
+        rospy.loginfo("Building the path...")
         # Making sure that we start from and end at a integer positions
         # TODO: May need to fix this later
         start = (int(start_position[0]),int(start_position[1]))
@@ -71,14 +73,15 @@ class PathPlan(object):
                 path.append(start_position)
             path.reverse()
             self.trajectory.points = path
+            rospy.loginfo(str(path))
             return
-
+        
         # getting the width and height 
         W = len(ground_map[0])
         H = len(ground_map) 
 
         # initializing all my sets
-        open_queue = queue.Queue()
+        open_queue = Queue.Queue()
         open_queue.put(start)
         open_set = set()
         open_set.add(start)
@@ -88,13 +91,15 @@ class PathPlan(object):
         f_score = {start:heuristic(start)}
         rev_f_score = {heuristic(start):start} # Not using this now
         all_neighbors = {}
-
+        found = False
         # The main part
         while not open_queue.empty():
             #current = rev_f_score[min(rev_f_score)]
             current = open_queue.get()
             if current == goal:
-                return build_path(came_from)
+                build_path(came_from)
+                found = True
+                break
             open_set.remove(current)
 
             # Get the neigbnors if they are not already in the `neighbors` dictionary
@@ -126,9 +131,10 @@ class PathPlan(object):
                     if each not in open_set:
                         open_set.add(each)
                         open_queue.put(each)
-        
-        rospy.loginfo("No Path found!")
-        return "No Path!"
+        if not found:
+            rospy.loginfo("No Path found!")
+            return
+    
             
         # publish trajectory
         self.traj_pub.publish(self.trajectory.toPoseArray())
