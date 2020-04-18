@@ -31,9 +31,6 @@ class PathPlan(object):
 
     def map_cb(self, msg):
         data = np.array(msg.data).reshape((msg.info.width, msg.info.height))
-
-       
-        
         self.map_x_offset = msg.info.origin.position.x
         self.map_y_offset = msg.info.origin.position.y
         self.map_resolution = msg.info.resolution
@@ -73,20 +70,19 @@ class PathPlan(object):
         # Reconstruct the path using parent pointers
         def build_path(came_from):
             path = []
-
             if goal != goal_position:
-                path.append(goal_position)
+                path.append(((goal_position[0]*self.map_resolution)+self.map_x_offset, (goal_position[1]*self.map_resolution)+self.map_x_offset))
             position = goal
             while came_from[position] is not None:
-                path.append(position)
+                path.append(((position[0]*self.map_resolution)+self.map_x_offset,(position[1]*self.map_resolution)+self.map_y_offset))
                 position = came_from[position]
             path.append(start)
             if start != start_position:
-                path.append(start_position)
+                path.append(((start_position[0]*self.map_resolution)+self.map_x_offset, (start_position[1]*self.map_resolution)+self.map_x_offset))
             path.reverse()
             
             #fix resolution and add back offset
-            path = [((i[0]*self.map_resolution)+self.map_x_offset, (i[1]*self.map_resolution)+self.map_y_offset) for i in path]
+            #path = [((i[0]*self.map_resolution)+self.map_x_offset, (i[1]*self.map_resolution)+self.map_y_offset) for i in path]
 
             self.trajectory.points = path
             #rospy.loginfo(str(path))
