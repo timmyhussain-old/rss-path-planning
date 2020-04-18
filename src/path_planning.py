@@ -31,15 +31,31 @@ class PathPlan(object):
 
     def map_cb(self, msg):
         data = np.array(msg.data).reshape((msg.info.width, msg.info.height))
+
         # Dialating the map using scipy
         kernel = np.array([[1,1,1,1],[1,1,1,1],[1,1,1,1],[1,1,1,1]])
         # TODO: dialate the path
         self.map_x_offset = msg.info.origin.position.x
         self.map_y_offset = msg.info.origin.position.y
         self.map_resolution = msg.info.resolution
+
+
+
+
+     
+
+
+
+        
+     
+
         # Treat some spots as certain obstacles
         self.g_map = np.where(data < 0, 100, data)
         self.g_map = np.where(self.g_map > 15, 100, self.g_map)
+        
+        self.x_origin = msg.info.origin.position.x
+        self.y_origin = msg.info.origin.position.y
+        self.resolution = msg.info.resolution
         
     def odom_cb(self, msg):
         self.start_pos = ((msg.pose.pose.position.x-self.map_x_offset)/self.map_resolution, (msg.pose.pose.position.y-self.map_y_offset)/self.map_resolution)
