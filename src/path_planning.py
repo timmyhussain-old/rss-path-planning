@@ -2,7 +2,7 @@
 
 import rospy
 import numpy as np
-import scipy as sp 
+from scipy import signal 
 import Queue
 from geometry_msgs.msg import PoseStamped, PoseArray
 from nav_msgs.msg import Odometry, OccupancyGrid
@@ -32,17 +32,18 @@ class PathPlan(object):
     def map_cb(self, msg):
         data = np.array(msg.data).reshape((msg.info.width, msg.info.height))
 
-        # Dialating the map using scipy
-        kernel = np.array([[1,1,1,1],[1,1,1,1],[1,1,1,1],[1,1,1,1]])
-        # TODO: dialate the path
+       
+        
         self.map_x_offset = msg.info.origin.position.x
         self.map_y_offset = msg.info.origin.position.y
         self.map_resolution = msg.info.resolution
-
-
         # Treat some spots as certain obstacles
         self.g_map = np.where(data < 0, 100, data)
-        self.g_map = np.where(self.g_map > 15, 100, self.g_map)
+        self.g_map = np.where(self.g_map > 10, 100, self.g_map)
+        
+        # Dialating the map using scipy
+        kernel = np.array([[1,1,1],[1,1,1],[1,1,1],[1,1,1]])*(1/9)
+        self.g_map = signal.convolve2d(sample, ker, boundary='fill', mode='same')
         
         self.x_origin = msg.info.origin.position.x
         self.y_origin = msg.info.origin.position.y
