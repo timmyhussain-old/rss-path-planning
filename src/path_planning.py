@@ -19,6 +19,9 @@ class PathPlan(object):
         self.goal_pos = None
         self.start_pos = None
         self.g_map = None
+        self.map_x_offset = None
+        self.map_y_offset = None
+        self.map_resolution = None
         
         # Subscribers
         self.odom_topic = rospy.get_param("~odom_topic")
