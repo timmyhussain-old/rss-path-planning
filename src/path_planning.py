@@ -19,6 +19,9 @@ class PathPlan(object):
         self.goal_pos = None
         self.start_pos = None
         self.g_map = None
+        self.resolution = None
+        self.x_origin = None
+        self.y_origin = None
         
         # Subscribers
         self.odom_topic = rospy.get_param("~odom_topic")
@@ -31,19 +34,31 @@ class PathPlan(object):
 
     def map_cb(self, msg):
         data = np.array(msg.data).reshape((msg.info.width, msg.info.height))
-        # Dialating the map using scipy
-        kernel = np.array([[1,1,1,1],[1,1,1,1],[1,1,1,1],[1,1,1,1]])
-        # TODO: dialate the path
+        # TODO: Dialating the map using scipy
+        #kernel = np.array([[1,1,1,1],[1,1,1,1],[1,1,1,1],[1,1,1,1]])
+        
      
         # Treat some spots as certain obstacles
         self.g_map = np.where(data < 0, 100, data)
         self.g_map = np.where(self.g_map > 15, 100, self.g_map)
         
+        self.x_origin = msg.info.origin.position.x
+        self.y_origin = msg.info.origin.position.y
+        self.resolution = msg.info.resolution
+        
     def odom_cb(self, msg):
-        self.start_pos = (msg.pose.pose.position.x,msg.pose.pose.position.y)
+        x = msg.pose.pose.position.x
+        y = msg.pose.pose.position.y
+        x = (x-self.x_origin)/self.resolution
+        y = (y-self.x_origin)/self.resolution
+        self.start_pos = (x,y)
 
     def goal_cb(self, msg):
-        self.goal_pos = (msg.pose.position.x,msg.pose.position.y)
+        x = msg.pose.position.x
+        y = msg.pose.position.y
+        x = (x-self.x_origin)/self.resolution
+        y = (y-self.x_origin)/self.resolution
+        self.goal_pos = (x,y)
         
         # Only call the path planned once a goal position has been specified
         self.plan_path(self.start_pos, self.goal_pos, self.g_map)
