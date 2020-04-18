@@ -34,17 +34,20 @@ class PathPlan(object):
         # Dialating the map using scipy
         kernel = np.array([[1,1,1,1],[1,1,1,1],[1,1,1,1],[1,1,1,1]])
         # TODO: dialate the path
-     
+        self.map_x_offset = msg.info.origin.position.x
+        self.map_y_offset = msg.info.origin.position.y
+        self.map_resolution = msg.info.resolution
         # Treat some spots as certain obstacles
         self.g_map = np.where(data < 0, 100, data)
         self.g_map = np.where(self.g_map > 15, 100, self.g_map)
         
     def odom_cb(self, msg):
-        self.start_pos = (msg.pose.pose.position.x,msg.pose.pose.position.y)
+        self.start_pos = ((msg.pose.pose.position.x-self.map_x_offset)/self.map_resolution, (msg.pose.pose.position.y-self.map_y_offset)/self.map_resolution)
+        #print("start:" + str((msg.pose.pose.position.x, msg.pose.pose.position.y)))
 
     def goal_cb(self, msg):
-        self.goal_pos = (msg.pose.position.x,msg.pose.position.y)
-        
+        self.goal_pos = ((msg.pose.position.x-self.map_x_offset)/self.map_resolution, (msg.pose.position.y-self.map_y_offset)/self.map_resolution) #(msg.pose.position.x,msg.pose.position.y)
+        #print("end: " + str((msg.pose.position.x, msg.pose.position.y)))
         # Only call the path planned once a goal position has been specified
         self.plan_path(self.start_pos, self.goal_pos, self.g_map)
 
@@ -62,6 +65,7 @@ class PathPlan(object):
         # Reconstruct the path using parent pointers
         def build_path(came_from):
             path = []
+
             if goal != goal_position:
                 path.append(goal_position)
             position = goal
@@ -72,8 +76,12 @@ class PathPlan(object):
             if start != start_position:
                 path.append(start_position)
             path.reverse()
+            
+            #fix resolution and add back offset
+            path = [((i[0]*self.map_resolution)+self.map_x_offset, (i[1]*self.map_resolution)+self.map_y_offset) for i in path]
+
             self.trajectory.points = path
-            rospy.loginfo(str(path))
+            #rospy.loginfo(str(path))
             return
         
         # getting the width and height 
