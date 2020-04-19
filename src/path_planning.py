@@ -42,8 +42,8 @@ class PathPlan(object):
         self.g_map = np.where(self.g_map > 10, 100, self.g_map)
         
         # Dialating the map using scipy
-        kernel = np.array([[1,1,1],[1,1,1],[1,1,1],[1,1,1]])*(1/9)
-        self.g_map = signal.convolve2d(self.g_map, kernel, boundary='fill', mode='same')
+        #kernel = np.array([[1,1,1],[1,1,1],[1,1,1],[1,1,1]])*(1/9)
+        #self.g_map = signal.convolve2d(self.g_map, kernel, boundary='fill', mode='same')
         
         self.x_origin = msg.info.origin.position.x
         self.y_origin = msg.info.origin.position.y
@@ -103,8 +103,9 @@ class PathPlan(object):
         #closed_set = set() # May not need this
         came_from = {start:None}
         g_score = {start:0}
-        f_score = {start:heuristic(start)}
-        
+
+        f_start = heuristic(start)
+        f_score = {start:f_start}
         rev_f_score = {f_start:set()} # just for efficiency
         rev_f_score[f_start].add(start)
         
