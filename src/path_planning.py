@@ -38,12 +38,13 @@ class PathPlan(object):
         self.map_y_offset = msg.info.origin.position.y
         self.map_resolution = msg.info.resolution
         # Treat some spots as certain obstacles
-        self.g_map = np.where(data < 0, 100, data)
-        self.g_map = np.where(self.g_map > 10, 100, self.g_map)
+        #self.g_map = np.where(data < 0, 100, data)
+        #self.g_map = np.where(self.g_map > 10, 100, self.g_map)
+        self.g_map = data
         
         # Dialating the map using scipy
-        #kernel = np.array([[1,1,1],[1,1,1],[1,1,1],[1,1,1]])*(1/9)
-        #self.g_map = signal.convolve2d(self.g_map, kernel, boundary='fill', mode='same')
+        kernel = np.array([[1,1,1],[1,1,1],[1,1,1]])*(1/9)
+        self.g_map = signal.convolve2d(self.g_map, kernel, boundary='fill', mode='same')
         
         self.x_origin = msg.info.origin.position.x
         self.y_origin = msg.info.origin.position.y
@@ -160,7 +161,7 @@ class PathPlan(object):
             for each in neighbors:
                 tentative_score = g_score[current] + 1
                 # Treating anything with probability higher than 10 as a certain wall
-                if ground_map[current[0]][current[1]] <= 10 and (each not in g_score or tentative_score <= g_score[each]):
+                if ground_map[current[0]][current[1]] == 0 and (each not in g_score or tentative_score <= g_score[each]):
                     g_score[each] = tentative_score
                     came_from[each] = current
                     # optimize this part by creating an h = {} and not repeating calculations
