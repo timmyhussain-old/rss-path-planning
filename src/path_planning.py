@@ -3,6 +3,7 @@
 import rospy
 import numpy as np
 from scipy import signal 
+import matplotlib.pyplot as plt
 import Queue
 from geometry_msgs.msg import PoseStamped, PoseArray
 from nav_msgs.msg import Odometry, OccupancyGrid
@@ -22,6 +23,8 @@ class PathPlan(object):
         self.map_x_offset = None
         self.map_y_offset = None
         self.map_resolution = None
+        #Euler angnles:
+        sel
         
         # Subscribers
         self.odom_topic = rospy.get_param("~odom_topic")
@@ -33,18 +36,25 @@ class PathPlan(object):
        
 
     def map_cb(self, msg):
-        data = np.array(msg.data).reshape((msg.info.width, msg.info.height))
+        data = np.array(msg.data).reshape((msg.info.height, msg.info.width))
         self.map_x_offset = msg.info.origin.position.x
         self.map_y_offset = msg.info.origin.position.y
         self.map_resolution = msg.info.resolution
+
         # Treat some spots as certain obstacles
         self.g_map = np.where(data < 0, 100, data)
         self.g_map = np.where(self.g_map > 10, 100, self.g_map)
-        
+        # VISUALIZING THE MAP
+        plt.imshow(self.g_map)
+        plt.show()
+
         # Dialating the map using scipy
         #kernel = np.array([[1,1,1],[1,1,1],[1,1,1],[1,1,1]])*(1/9)
         #self.g_map = signal.convolve2d(self.g_map, kernel, boundary='fill', mode='same')
         
+
+
+
         self.x_origin = msg.info.origin.position.x
         self.y_origin = msg.info.origin.position.y
         self.resolution = msg.info.resolution
@@ -54,7 +64,9 @@ class PathPlan(object):
         #print("start:" + str((msg.pose.pose.position.x, msg.pose.pose.position.y)))
 
     def goal_cb(self, msg):
-        self.goal_pos = ((msg.pose.position.x-self.map_x_offset)/self.map_resolution, (msg.pose.position.y-self.map_y_offset)/self.map_resolution) #(msg.pose.position.x,msg.pose.position.y)
+        
+        self.goal_pos = ((msg.pose.position.x-self.map_x_offset)/self.map_resolution, (msg.pose.position.y-self.map_y_offset)/self.map_resolution) 
+        
         #print("end: " + str((msg.pose.position.x, msg.pose.position.y)))
         # Only call the path planned once a goal position has been specified
         self.plan_path(self.start_pos, self.goal_pos, self.g_map)
