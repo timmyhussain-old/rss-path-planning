@@ -47,10 +47,9 @@ class PathPlan(object):
         # VISUALIZING THE MAP
         plt.imshow(self.g_map)
         plt.show()
-
         # Dialating the map using scipy
-        #kernel = np.array([[1,1,1],[1,1,1],[1,1,1],[1,1,1]])*(1/9)
-        #self.g_map = signal.convolve2d(self.g_map, kernel, boundary='fill', mode='same')
+        kernel = np.array([[1,1,1],[1,1,1],[1,1,1]])*(1/9)
+        self.g_map = signal.convolve2d(self.g_map, kernel, boundary='fill', mode='same')
         
 
 
@@ -85,15 +84,15 @@ class PathPlan(object):
         # Reconstruct the path using parent pointers
         def build_path(came_from):
             path = []
-            if goal != goal_position:
-                path.append(((goal_position[0]*self.map_resolution)+self.map_x_offset, (goal_position[1]*self.map_resolution)+self.map_y_offset))
-            position = goal
+            #if goal != goal_position:
+            path.append(((goal_position[0]*self.map_resolution)+self.map_x_offset, (goal_position[1]*self.map_resolution)+self.map_y_offset))
+            position = came_from[goal]
             while came_from[position] is not None:
                 path.append(((position[0]*self.map_resolution)+self.map_x_offset,(position[1]*self.map_resolution)+self.map_y_offset))
                 position = came_from[position]
-            path.append(start)
-            if start != start_position:
-                path.append(((start_position[0]*self.map_resolution)+self.map_x_offset, (start_position[1]*self.map_resolution)+self.map_y_offset))
+            #path.append(start)
+            #if start != start_position:
+            path.append(((start_position[0]*self.map_resolution)+self.map_x_offset, (start_position[1]*self.map_resolution)+self.map_y_offset))
             path.reverse()
             
             #fix resolution and add back offset
@@ -172,7 +171,7 @@ class PathPlan(object):
             for each in neighbors:
                 tentative_score = g_score[current] + 1
                 # Treating anything with probability higher than 10 as a certain wall
-                if ground_map[current[0]][current[1]] <= 10 and (each not in g_score or tentative_score <= g_score[each]):
+                if ground_map[current[0]][current[1]] == 0 and (each not in g_score or tentative_score <= g_score[each]):
                     g_score[each] = tentative_score
                     came_from[each] = current
                     # optimize this part by creating an h = {} and not repeating calculations
