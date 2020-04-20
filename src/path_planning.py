@@ -186,24 +186,24 @@ class PathPlan(object):
             neighbors = []
             if current not in all_neighbors:
                 # This just looks bad, but it's OK for now
-                if current[0]+1 <= H-1:
+                if current[0]+1 <= W-1:
                     neighbors.append((current[0]+1, current[1]))
                 if current[0]-1 >= 0:  
                     neighbors.append((current[0]-1, current[1]))
-                if current[1]+1 <= W-1:
+                if current[1]+1 <= H-1:
                     neighbors.append((current[0], current[1]+1))
                 if current[1]-1 >= 0:
                     neighbors.append((current[0], current[1]-1))
                 
                 #DIAGONALS
                 #Bottom right
-                if current[0]+1 <= H-1 and current[1]+1 <= W-1:
+                if current[0]+1 <= W-1 and current[1]+1 <= H-1:
                     neighbors.append((current[0]+1, current[1]+1))
                 #Bottom left
-                if current[0]+1 <= H-1 and current[1]-1 >= 0:
+                if current[0]+1 <= W-1 and current[1]-1 >= 0:
                     neighbors.append((current[0]+1, current[1]-1))
                 #Top right
-                if current[0]-1 >= 0 and current[1]+1 <= W-1:
+                if current[0]-1 >= 0 and current[1]+1 <= H-1:
                     neighbors.append((current[0]-1, current[1]+1))
                 #Top left
                 if current[0]-1 >= 0 and current[1]-1 <= 0:
@@ -216,7 +216,7 @@ class PathPlan(object):
             for each in neighbors:
                 tentative_score = g_score[current] + 1
                 # Treating anything with probability higher than 10 as a certain wall
-                if ground_map[current[1]][current[0]] == 0  and (each not in g_score or tentative_score <= g_score[each]):
+                if ground_map[each[1]][each[0]] == 0  and (each not in g_score or tentative_score <= g_score[each]):
                     g_score[each] = tentative_score
                     came_from[each] = current
                     # optimize this part by creating an h = {} and not repeating calculations
