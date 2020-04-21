@@ -8,7 +8,7 @@ class LoadTrajectory(object):
     """ Loads a trajectory from the file system and publishes it to a ROS topic.
     """
     def __init__(self):
-        self.path           = rospy.get_param("~trajectory")
+        self.path           = rospy.get_param("~test_trajectory")
 
         # initialize and load the trajectory
         self.trajectory = LineTrajectory("/loaded_trajectory")

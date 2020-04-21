@@ -17,12 +17,17 @@ class PurePursuit(object):
     def __init__(self):
         self.odom_topic       = rospy.get_param("~odom_topic")
         self.lookahead        = 1# FILL IN #
-        self.speed            = 0# FILL IN #
+        self.speed            = 0.5# FILL IN #
         self.wrap             = 0# FILL IN #
         self.wheelbase_length = 0# FILL IN #
         self.trajectory  = utils.LineTrajectory("/followed_trajectory")
         self.traj_sub = rospy.Subscriber("/trajectory/current", PoseArray, self.trajectory_callback, queue_size=1)
         self.drive_pub = rospy.Publisher("/drive", AckermannDriveStamped, queue_size=1)
+        self.drive_msg = AckermannDriveStamped()
+        rospy.Subscriber(self.odom_topic, Odometry, self.odomCallback)
+        self.segment_num = 100
+        self.arr_flag = 0
+
 
     def trajectory_callback(self, msg):
         ''' Clears the currently followed trajectory, and loads the new one from the message
@@ -33,28 +38,55 @@ class PurePursuit(object):
         self.trajectory.publish_viz(duration=0.0)
 
         #Convert trajectory PoseArray to arr (line segment array)
-        #arr = 
+        N = self.segment_num // (len(msg.poses) - 1)
+        rospy.loginfo(N)
+        self.arr = self.create_segment(msg.poses, N)
+        self.arr_flag = 1
+        # rospy.loginfo(arr)
 
-        #Get location of robot in global frame (call particle filter?)
-        #loc = 
+    def odomCallback(self, msg):
+        loc = np.array([msg.pose.pose.position.x, msg.pose.pose.position.y])
 
-        ix_min = find_closest_point(arr, loc) #Index of closest line segment on trajectory to the car
-
-        curvature = find_lookahead(arr, ix_min, loc, self.lookahead) #curvature (steering angle) in global frame
+        if self.arr_flag:
+            ix_min = self.find_closest_point(self.arr, loc) #Index of closest line segment on trajectory to the car
+            try:
+                curvature = self.find_lookahead(self.arr, ix_min, loc, self.lookahead) #curvature (steering angle) in global frame
+                self.drive_msg.drive.speed = self.speed
+                self.drive_msg.drive.steering_angle = curvature
+                self.drive_pub.publish(self.drive_msg)
+            except UnboundLocalError:
+                # self.lookahead = self.lookahead + 1.0
+                pass
 
         #Publish curvature/steering angle and self.speed to "/drive"
 
+    def create_segment(self, arr, N):
+        '''
+        inputs:
+        -numpy array of
+        '''
+    #     a = arr[0]
+    #     b = arr[1]
+    #     np.linspace(a.position.x, b.position.x, N)
+    #     np.linspace(a.position.y, b.position.y, N)
+        x = []
+        y = []
+        for i in range(len(arr) - 2):
+            a = arr[i]
+            b = arr[i+1]
+            x = x + np.linspace(a.position.x, b.position.x, N, endpoint=False).tolist()
+            y = y + np.linspace(a.position.y, b.position.y, N, endpoint=False).tolist()
+        a = arr[i+1]
+        b = arr[i+2]
+        x = x + np.linspace(a.position.x, b.position.x, N, endpoint=True).tolist()
+        y = y + np.linspace(a.position.y, b.position.y, N, endpoint=True).tolist()
 
-    def find_closest_point(arr, loc):
-    """
-    inputs:
-    -arr = N x 2 x 2 numpy array with each segment of the trajectory of form [[x1, y1],[x2, y2]]
-    -loc = [x, y] numpy array representing car location in global frame
+        segments = []
+        for i in range(len(x) - 1):
+            segments.append([[x[i], y[i]], [x[i+1], y[i+1]]])
+        return np.array(segments)
 
-    Might not need this -> output: closest_point = [x, y] numpy array representing closest point on trajectory to car
-    output: index of closest line segment
-    """
-
+    def find_closest_point(self, arr, loc):
         line_dx_array = arr[:,1,0] - arr[:,0,0] #line segment x deltas
         line_dy_array = arr[:,1,1] - arr[:,0,1] #line segment y deltas
 
@@ -87,26 +119,16 @@ class PurePursuit(object):
         return ix_min
 
 
-    def find_lookahead(arr, ix_min, loc, L_dist, debug=False):
-    '''
-    inputs:
-    -arr = N x 2 x 2 numpy array where each segment is of the form [[x1, y1],
-                                                                    [x2, y2]]
-    -ix_min = index of closest segment
-    -loc = location of the car in global frame
-    -L_dist = lookahead distance
-     
-    output: curvature (steering angle) in global frame
-    '''
+    def find_lookahead(self, arr, ix_min, loc, L_dist, debug=False):
         for i in range(ix_min, arr.shape[0], 1):
             Q = loc                 # Centre of circle
             r = L_dist                 # Radius of circle
             P1 = arr[i, 0, :]      # Start of line segment
-            V = arr[i, 1, :] - P1 
+            V = arr[i, 1, :] - P1
             a = V.dot(V)
             b = 2 * V.dot(P1 - Q)
             c = P1.dot(P1) + Q.dot(Q) - 2 * P1.dot(Q) - r**2
-            
+
             disc = b**2 - 4 * a * c
             if disc < 0:
                 continue
@@ -120,10 +142,10 @@ class PurePursuit(object):
                 lookahead_global = P1 + t2*V
                 break
         lookahead_local = lookahead_global - loc
-        curvature = lookahead_local[0] * 2.0/L_dist
+        curvature = lookahead_local[0] * 2.0/L_dist**2
         if debug:
             return lookahead_global, curvature
-        return curvature
+        return curvature #- np.pi
 
 
 if __name__=="__main__":
