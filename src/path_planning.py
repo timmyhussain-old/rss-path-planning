@@ -66,16 +66,13 @@ class PathPlan(object):
         #self.g_map = np.where(self.g_map > 0, 100, self.g_map)
 
         # Dialating the map using scipy
-        #kernel = np.array([[1,1,1],[1,1,1],[1,1,1]])*(1/9)
-        #self.g_map = signal.convolve2d(self.g_map, kernel, boundary='fill', mode='same')
+        kernel = np.array([[1,1,1],[1,1,1],[1,1,1]]*3)
+        self.g_map = signal.convolve2d(self.g_map, kernel)
 
         # VISUALIZING THE MAP - only for debugging
-        plt.imshow(self.g_map)
-        plt.show()
-
-        
-    
-        
+        #plt.imshow(self.g_map)
+        #plt.show()
+  
     def odom_cb(self, msg):
         x_0 = msg.pose.pose.position.x
         y_0 = msg.pose.pose.position.y
@@ -117,8 +114,8 @@ class PathPlan(object):
         start = (int(start_d[0]),int(start_d[1]))
         goal = (int(goal_d[0]), int(goal_d[1]))
         
-        print("start = " + str(start))
-        print("goal = "+ str(goal))
+        #print("start = " + str(start))
+        #print("goal = "+ str(goal))
 
         # Using L-2 norm distance... maybe manhatan would be better?
         def heuristic(location):
