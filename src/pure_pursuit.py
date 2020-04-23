@@ -15,11 +15,11 @@ class PurePursuit(object):
     """ Implements Pure Pursuit trajectory tracking with a fixed lookahead and speed.
     """
     def __init__(self):
-        self.odom_topic       = rospy.get_param("~odom_topic")
-        self.lookahead        = 1# FILL IN #
+        self.odom_topic       = "/pf/pose/odom"
+        self.lookahead        = 0.5# FILL IN #
         self.speed            = 0.5# FILL IN #
         self.wrap             = 0# FILL IN #
-        self.wheelbase_length = 0# FILL IN #
+        self.wheelbase_length = 0.2# Guess #
         self.trajectory  = utils.LineTrajectory("/followed_trajectory")
         self.traj_sub = rospy.Subscriber("/trajectory/current", PoseArray, self.trajectory_callback, queue_size=1)
         self.drive_pub = rospy.Publisher("/drive", AckermannDriveStamped, queue_size=1)
@@ -28,10 +28,39 @@ class PurePursuit(object):
         self.segment_num = 100
         self.arr_flag = 0
 
+	#"""
+	self.markerPub = rospy.Publisher('robotMarker', Marker, queue_size=10)
+	self.robotMarker = Marker()
+	self.robotMarker.header.frame_id = "/map"
+	self.robotMarker.scale.x = 0.2
+    	self.robotMarker.scale.y = 0.2
+    	self.robotMarker.scale.z = 0.2
+
+	self.robotMarker.color.r = 0.0
+    	self.robotMarker.color.g = 1.0
+    	self.robotMarker.color.b = 0.0
+    	self.robotMarker.color.a = 1.0
+	self.robotMarker.type = 2
+
+	self.markerPub = rospy.Publisher('robotMarker2', Marker, queue_size=10)
+	self.robotMarker2 = Marker()
+	self.robotMarker2.header.frame_id = "/map"
+	self.robotMarker2.scale.x = 0.2
+    	self.robotMarker2.scale.y = 0.2
+    	self.robotMarker2.scale.z = 0.2
+
+	self.robotMarker2.color.r = 1.0
+    	self.robotMarker2.color.g = 0.0
+    	self.robotMarker2.color.b = 0.0
+    	self.robotMarker2.color.a = 1.0
+	self.robotMarker2.type = 2
+#"""
 
     def trajectory_callback(self, msg):
         ''' Clears the currently followed trajectory, and loads the new one from the message
         '''
+	#rospy.loginfo('Start Traj callback')
+
         #print "Receiving new trajectory:", len(msg.poses), "points"
         self.trajectory.clear()
         self.trajectory.fromPoseArray(msg)
@@ -45,17 +74,32 @@ class PurePursuit(object):
         # rospy.loginfo(arr)
 
     def odomCallback(self, msg):
+	#rospy.loginfo('Start Odom callback')
+
         loc = np.array([msg.pose.pose.position.x, msg.pose.pose.position.y])
+	quat = msg.pose.pose.orientation
+
+
+	#rospy.loginfo(loc)
 
         if self.arr_flag:
             ix_min = self.find_closest_point(self.arr, loc) #Index of closest line segment on trajectory to the car
             try:
-                curvature = self.find_lookahead(self.arr, ix_min, loc, self.lookahead) #curvature (steering angle) in global frame
+		#rospy.loginfo('Start math')
+		#rospy.loginfo(ix_min)
+                curvature = self.find_lookahead(self.arr, ix_min, loc, quat, self.lookahead) #curvature (steering angle) in global frame
                 self.drive_msg.drive.speed = self.speed
                 self.drive_msg.drive.steering_angle = curvature
                 self.drive_pub.publish(self.drive_msg)
+		#rospy.loginfo('Published drive')
+
             except UnboundLocalError:
                 # self.lookahead = self.lookahead + 1.0
+		#Go straight if don't know where to go
+		self.drive_msg.drive.speed = self.speed
+		self.drive_msg.drive.steering_angle = 0
+                self.drive_pub.publish(self.drive_msg)
+		#rospy.loginfo('Too far!')
                 pass
 
         #Publish curvature/steering angle and self.speed to "/drive"
@@ -119,30 +163,117 @@ class PurePursuit(object):
         return ix_min
 
 
-    def find_lookahead(self, arr, ix_min, loc, L_dist, debug=False):
+    def find_lookahead(self, arr, ix_min, loc, quat, L_dist, debug=False):
+	rospy.loginfo('ix_min')
+	rospy.loginfo(ix_min)
+
+
         for i in range(ix_min, arr.shape[0], 1):
-            Q = loc                 # Centre of circle
-            r = L_dist                 # Radius of circle
+            Q = loc                # Centre of circle is vehicle location
+            r = L_dist             # Radius of circle is lookahead distance
             P1 = arr[i, 0, :]      # Start of line segment
-            V = arr[i, 1, :] - P1
-            a = V.dot(V)
+            V = arr[i, 1, :] - P1  # Line segment vector (the endpoint if starts at origin)
+            
+	    a = V.dot(V)
             b = 2 * V.dot(P1 - Q)
             c = P1.dot(P1) + Q.dot(Q) - 2 * P1.dot(Q) - r**2
 
             disc = b**2 - 4 * a * c
             if disc < 0:
-                continue
+                continue #circle doesn't intersect this line segment, try next one
+
+	    #Fractions along the line segment where circle intersects
             t1 = (-b + np.sqrt(disc)) / (2.0 * a)
             t2 = (-b - np.sqrt(disc)) / (2.0 * a)
-            if ((t1 < 1) & (t1 > 0)):
-                lookahead_global = P1 + t1*V
-    #             print(i)
-                break
-            elif ((t2 < 1) & (t2 > 0)):
-                lookahead_global = P1 + t2*V
-                break
-        lookahead_local = lookahead_global - loc
-        curvature = lookahead_local[0] * 2.0/L_dist**2
+	    
+		
+	    delta_theta_1 = None
+	    delta_theta_2 = None
+
+            if ((t1 < 1) & (t1 > 0)): #1st possible global frame intersection location
+                lookahead_global_1 = P1 + t1*V 
+
+		lookahead_local_1 = lookahead_global_1 - loc
+   		(roll, pitch, yaw) = tf.transformations.euler_from_quaternion([quat.x,quat.y,quat.z,quat.w])
+		lookahead_theta = np.arctan2(lookahead_local_1[1], lookahead_local_1[0])
+		delta_theta_1 = lookahead_theta - yaw
+		if delta_theta_1 < -np.pi:
+			delta_theta_1 += 2*np.pi
+		if delta_theta_1 > np.pi:
+			delta_theta_1 -= 2*np.pi
+		
+                #break
+            if ((t2 < 1) & (t2 > 0)): #2nd possible global frame intersection location
+                lookahead_global_2 = P1 + t2*V
+                #break
+		
+		lookahead_local_2 = lookahead_global_2 - loc
+		(roll, pitch, yaw) = tf.transformations.euler_from_quaternion([quat.x,quat.y,quat.z,quat.w])
+		lookahead_theta = np.arctan2(lookahead_local_2[1], lookahead_local_2[0])
+		delta_theta_2 = lookahead_theta - yaw
+
+		if delta_theta_2 < -np.pi:
+			delta_theta_2 += 2*np.pi
+		if delta_theta_2 > np.pi:
+			delta_theta_2 -= 2*np.pi
+
+	    #Expecting delta theta values to be -3.1 to 3.1, with 0 being right on 
+	    #rospy.loginfo('delta_theta_1')
+	    #rospy.loginfo(delta_theta_1)
+
+	    #rospy.loginfo('delta_theta_2')
+	    #rospy.loginfo(delta_theta_2)
+
+	    #If both exist, must be ix_min, so choose the theta more in car's direction
+	    if delta_theta_1 and delta_theta_2:
+		if abs(delta_theta_1) < abs(delta_theta_2):
+			delta_theta = delta_theta_1
+			break
+		else:
+			delta_theta = delta_theta_2
+			break
+
+	    #If one exists, if it's within a 90 deg swath either way, use it.  Otherwise next segment.
+	    elif delta_theta_1:
+		if abs(delta_theta_1) < np.pi/2:
+			delta_theta = delta_theta_1
+			break
+		else:
+			continue
+
+	    #If one exists
+	    elif delta_theta_2:
+		if abs(delta_theta_2) < np.pi/2:
+			delta_theta = delta_theta_2
+			break
+		else:
+			continue
+
+	    #If no intersection exists, go to next segment
+	    else:
+		continue
+
+
+		#self.robotMarker.pose.position.x = lookahead_global_1[0]
+		#self.robotMarker.pose.position.y = lookahead_global_1[1]
+		#self.markerPub.publish(self.robotMarker)
+		
+		#rospy.loginfo('aim point global 1:')
+		#rospy.loginfo(lookahead_global_1)
+
+
+
+	#rospy.loginfo('delta_theta')
+	#rospy.loginfo(delta_theta)
+
+
+	rad_curvature = 0.5 * L_dist / np.sin(delta_theta) #Rad. of curvature needed to hit lookahead point
+	curvature = np.arctan(self.wheelbase_length / rad_curvature)
+
+	#rospy.loginfo('curvature')
+	#rospy.loginfo(curvature)
+
+	
         if debug:
             return lookahead_global, curvature
         return curvature #- np.pi
