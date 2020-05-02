@@ -25,7 +25,6 @@ class PurePursuit(object):
         self.drive_pub = rospy.Publisher("/drive", AckermannDriveStamped, queue_size=1)
         self.drive_msg = AckermannDriveStamped()
         rospy.Subscriber(self.odom_topic, Odometry, self.odomCallback)
-        self.segment_num = 100
         self.arr_flag = 0
 
 	#"""
@@ -65,6 +64,8 @@ class PurePursuit(object):
         self.trajectory.clear()
         self.trajectory.fromPoseArray(msg)
         self.trajectory.publish_viz(duration=0.0)
+
+	self.segment_num = max(len(msg.poses), 5000)
 
         #Convert trajectory PoseArray to arr (line segment array)
         N = self.segment_num // (len(msg.poses) - 1)
