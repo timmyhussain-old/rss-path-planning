@@ -18,10 +18,10 @@ class PursuitAvoid(object):
     """
     def __init__(self):
         self.odom_topic       = "/pf/pose/odom"
-        self.lookahead        = 0.5# FILL IN #
+        self.lookahead        = 20# FILL IN #
         self.speed            = 0.5# FILL IN #
         # self.wrap             = 0# FILL IN #
-        self.wheelbase_length = 0.2# Guess #
+        self.wheelbase_length = 1.5# Guess #
         self.trajectory  = utils.LineTrajectory("/followed_trajectory")
         # self.traj_sub = rospy.Subscriber("/trajectory/current", PoseArray, self.trajectory_callback, queue_size=1)
 
@@ -30,22 +30,88 @@ class PursuitAvoid(object):
 
         rospy.Subscriber(self.odom_topic, Odometry, self.odomCallback)
         rospy.Subscriber("/tesse/hood_lidar/scan", LaserScan, self.scanCallback)
-        self.segment_num = 100
+        # self.segment_num = 1
+
         self.arr_flag = 0
+        self.odom_flag = 0
 
     def get_index(self, angle1, angle2, angle_min, angle_increment):
-            k1 = int ((angle1 - angle_min )/ angle_increment)
-            k2 = int ((angle2 - angle_min )/ angle_increment)
+        k1 = int ((angle1 - angle_min )/ angle_increment)
+        k2 = int ((angle2 - angle_min )/ angle_increment)
 
-            return k1, k2 #np.linspace(angle1, angle2, k2-k1+1, endpoint=True)
+        return k1, k2, np.linspace(angle1, angle2, k2-k1, endpoint=True)
+
+    def find_nearest(self, value):
+        array = self.angles
+        idx = (np.abs(array - value)).argmin()
+        return idx
+
+    def get_curvature(self, curvature, msg):
+        for i in range(self.find_nearest(curvature), len(angles)):
+            ix1, ix2, front_angs = self.get_index(self.angles_minus[i], self.angles_plus[i], msg.angle_min, msg.angle_increment)
+            A = np.array([front_angs, [1]*len(front_angs)]).T
+            x_hat = np.dot(np.linalg.inv(np.dot(A.T, A)), np.dot(A.T, msg.ranges[ix1:ix2]))
+            lsq_ranges = np.dot(A, x_hat)
+            low_mean_min = np.mean(sorted(lsq_ranges)[:(ix2-ix1)//2])
+            del A, x_hat, lsq_ranges, ix1, ix2
+            if low_mean_min > self.lookahead:
+                print(self.angles[i])
+                break
+            else:
+                ix1, ix2, front_angs = self.get_index(-self.angles_plus[i], -self.angles_minus[i], msg.angle_min, msg.angle_increment)
+                A = np.array([front_angs, [1]*len(front_angs)]).T
+                x_hat = np.dot(np.linalg.inv(np.dot(A.T, A)), np.dot(A.T, msg.ranges[ix1:ix2]))
+                lsq_ranges = np.dot(A, x_hat)
+                low_mean_min = np.mean(sorted(lsq_ranges)[:(ix2-ix1)//2])
+                del A, x_hat, lsq_ranges, ix1, ix2
+                if low_mean_min > lookahead:
+                    print(self.angles[i])
+                    break
+        x_body = self.lookahead*np.sin(self.angles[i])
+        y_body = self.lookahead*np.cos(self.angles[i])
+        R_track = 2*x_body/ self.lookahead**2
+        curvature = np.arctan(self.wheelbase_length/R_track)
+        del R_track, x_body, y_body
+        return curvature
 
     def scanCallback(self, msg):
         ranges = np.array(msg.ranges)
-        angles = np.linspace(0, msg.angle_max, 50)
+        if not self.scan_flag:
+            angle = np.arctan(1/self.lookahead)
+            self.angles = np.linspace(0, msg.angle_max - angle, 50)
+            self.angles_plus = self.angles + angle
+            self.angles_minus = self.angles - angle
+            del angle
+            self.scan_flag = 1
 
-        angle1 = -np.atan(1.0/self.lookahead)
-        angle2 = -angle1
-        ix1, ix2 self.get_index(angle1, angle2, msg.angle_min, msg.angle_increment)
+        curvature = None
+
+        if self.arr_flag and self.odom_flag:
+            ix_min = self.find_closest_point(self.arr, self.loc) #Index of closest line segment on trajectory to the car
+            try:
+        		#rospy.loginfo('Start math')
+        		#rospy.loginfo(ix_min)
+                curvature = self.find_lookahead(self.arr, ix_min, self.loc, self.quat, self.lookahead) #curvature (steering angle) in global frame
+                # self.drive_msg.drive.speed = self.speed
+                # self.drive_msg.drive.steering_angle = curvature
+                # self.drive_pub.publish(self.drive_msg)
+                #rospy.loginfo('Published drive')
+
+            except UnboundLocalError:
+                #
+                # curvature = None
+                pass
+
+        if curvature:
+            curvature = self.get_curvature(curvature, msg)
+            self.drive_msg.drive.speed = self.speed
+            self.drive_msg.drive.steering_angle = curvature
+            self.drive_pub.publish(self.drive_msg)
+        else:
+            self.lookahead = self.lookahead**1.2
+            self.drive_msg.drive.speed = 0
+            self.drive_msg.drive.steering_angle = 0
+            self.drive_pub.publish(self.drive_msg)
 
 
     def trajectory_callback(self, msg):
@@ -58,6 +124,8 @@ class PursuitAvoid(object):
         self.trajectory.fromPoseArray(msg)
         self.trajectory.publish_viz(duration=0.0)
 
+        self.segment_num = min(len(msg.poses), 5000)
+
         #Convert trajectory PoseArray to arr (line segment array)
         N = self.segment_num // (len(msg.poses) - 1)
         rospy.loginfo(N)
@@ -68,31 +136,10 @@ class PursuitAvoid(object):
     def odomCallback(self, msg):
 	#rospy.loginfo('Start Odom callback')
 
-        loc = np.array([msg.pose.pose.position.x, msg.pose.pose.position.y])
-        quat = msg.pose.pose.orientation
-
-
-	#rospy.loginfo(loc)
-
-        if self.arr_flag:
-            ix_min = self.find_closest_point(self.arr, loc) #Index of closest line segment on trajectory to the car
-            try:
-		#rospy.loginfo('Start math')
-		#rospy.loginfo(ix_min)
-                curvature = self.find_lookahead(self.arr, ix_min, loc, quat, self.lookahead) #curvature (steering angle) in global frame
-                self.drive_msg.drive.speed = self.speed
-                self.drive_msg.drive.steering_angle = curvature
-                self.drive_pub.publish(self.drive_msg)
-		#rospy.loginfo('Published drive')
-
-            except UnboundLocalError:
-                # self.lookahead = self.lookahead + 1.0
-		#Go straight if don't know where to go
-		self.drive_msg.drive.speed = self.speed
-		self.drive_msg.drive.steering_angle = 0
-                self.drive_pub.publish(self.drive_msg)
-		#rospy.loginfo('Too far!')
-                pass
+        self.loc = np.array([msg.pose.pose.position.x, msg.pose.pose.position.y])
+        self.quat = msg.pose.pose.orientation
+        if not self.odom_flag:
+            self.odom_flag = 1
 
         #Publish curvature/steering angle and self.speed to "/drive"
 
@@ -268,7 +315,7 @@ class PursuitAvoid(object):
 
         if debug:
             return lookahead_global, curvature
-        return curvature #- np.pi
+        return curvature, delta_theta #- np.pi
 
 
 if __name__=="__main__":
