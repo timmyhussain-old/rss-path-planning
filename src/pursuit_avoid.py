@@ -34,6 +34,7 @@ class PursuitAvoid(object):
 
         self.arr_flag = 0
         self.odom_flag = 0
+        self.scan_flag = 0
 
     def get_index(self, angle1, angle2, angle_min, angle_increment):
         k1 = int ((angle1 - angle_min )/ angle_increment)
@@ -108,8 +109,8 @@ class PursuitAvoid(object):
             self.drive_msg.drive.steering_angle = curvature
             self.drive_pub.publish(self.drive_msg)
         else:
-            self.lookahead = self.lookahead**1.2
-            self.drive_msg.drive.speed = 0
+            # self.lookahead = self.lookahead**1.2
+            self.drive_msg.drive.speed = 5
             self.drive_msg.drive.steering_angle = 0
             self.drive_pub.publish(self.drive_msg)
 
