@@ -22,9 +22,26 @@ class PursuitAvoid(object):
         self.speed            = 5# FILL IN #
         # self.wrap             = 0# FILL IN #
         self.wheelbase_length = 1.5# Guess #
-        self.trajectory  = utils.LineTrajectory("/followed_trajectory")
-        self.traj_sub = rospy.Subscriber("/trajectory/current", PoseArray, self.trajectory_callback, queue_size=1)
+	
+        # self.trajectory  = utils.LineTrajectory("/followed_trajectory")
+        # self.traj_sub = rospy.Subscriber("/trajectory/current", PoseArray, self.trajectory_callback, queue_size=1)
 
+       #**********************************************************************************************************
+        self.path = rospy.get_param("~race_trj")
+	#self.path = rospy.get_param("~avoid_trj")
+        self.trajectory  = utils.LineTrajectory("/followed_trajectory")
+        self.trajectory.load(self.path)
+        #self.segment_num = max(len(self.trajectory.points), 10)
+	self.segment_num = max(len(self.trajectory.points), 500)
+
+        #Convert trajectory PoseArray to arr (line segment array)
+        N = self.segment_num // (len(self.trajectory.points) - 1)
+        rospy.loginfo(N)
+        self.arr = self.create_segment(self.trajectory.toPoseArray().poses, N)
+        self.arr_flag = 1
+        #rospy.loginfo(self.arr)
+        #***********************************************************************************************************
+	
         self.drive_pub = rospy.Publisher("/tesse/drive", AckermannDriveStamped, queue_size=1)
         self.drive_msg = AckermannDriveStamped()
 
@@ -52,7 +69,7 @@ class PursuitAvoid(object):
             ix1, ix2, front_angs = self.get_index(self.angles_minus[i], self.angles_plus[i], msg.angle_min, msg.angle_increment)
             rospy.loginfo("ix1: " + str(ix1) + " ix2: " + str(ix2) + "\n")
             f = np.poly1d(np.polyfit(front_angs, msg.ranges[ix1:ix2], deg=1))
-            low_mean_min = np.mean(f(front_angs)[:(ix2-ix1)//2])
+            low_mean_min = np.mean(sorted(f(front_angs))[:(ix2-ix1)//2])
 
             if low_mean_min > self.lookahead:
                 print(self.angles[i])
@@ -61,7 +78,7 @@ class PursuitAvoid(object):
                 ix1, ix2, front_angs = self.get_index(-self.angles_plus[i], -self.angles_minus[i], msg.angle_min, msg.angle_increment)
                 A = np.array([front_angs, [1]*len(front_angs)]).T
                 f = np.poly1d(np.polyfit(front_angs, msg.ranges[ix1:ix2], deg=1))
-                low_mean_min = np.mean(f(front_angs)[:(ix2-ix1)//2])
+                low_mean_min = np.mean(sorted(f(front_angs))[:(ix2-ix1)//2])
                 rospy.loginfo("ix1: " + str(ix1) + " ix2: " + str(ix2) + "\n")
                 if low_mean_min > self.lookahead:
                     print(self.angles[i])
@@ -89,8 +106,8 @@ class PursuitAvoid(object):
         if self.arr_flag and self.odom_flag:
             ix_min = self.find_closest_point(self.arr, self.loc) #Index of closest line segment on trajectory to the car
             try:
-        		#rospy.loginfo('Start math')
-        		#rospy.loginfo(ix_min)
+        	#rospy.loginfo('Start math')
+        	#rospy.loginfo(ix_min)
                 curvature = self.find_lookahead(self.arr, ix_min, self.loc, self.quat, self.lookahead) #curvature (steering angle) in global frame
                 # self.drive_msg.drive.speed = self.speed
                 # self.drive_msg.drive.steering_angle = curvature
