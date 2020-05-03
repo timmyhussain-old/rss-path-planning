@@ -19,11 +19,11 @@ class PursuitAvoid(object):
     def __init__(self):
         self.odom_topic       = "/pf/pose/odom"
         self.lookahead        = 20# FILL IN #
-        self.speed            = 0.5# FILL IN #
+        self.speed            = 5# FILL IN #
         # self.wrap             = 0# FILL IN #
         self.wheelbase_length = 1.5# Guess #
         self.trajectory  = utils.LineTrajectory("/followed_trajectory")
-        # self.traj_sub = rospy.Subscriber("/trajectory/current", PoseArray, self.trajectory_callback, queue_size=1)
+        self.traj_sub = rospy.Subscriber("/trajectory/current", PoseArray, self.trajectory_callback, queue_size=1)
 
         self.drive_pub = rospy.Publisher("/tesse/drive", AckermannDriveStamped, queue_size=1)
         self.drive_msg = AckermannDriveStamped()
@@ -48,24 +48,22 @@ class PursuitAvoid(object):
         return idx
 
     def get_curvature(self, curvature, msg):
-        for i in range(self.find_nearest(curvature), len(angles)):
+        for i in range(self.find_nearest(curvature), len(self.angles)):
             ix1, ix2, front_angs = self.get_index(self.angles_minus[i], self.angles_plus[i], msg.angle_min, msg.angle_increment)
-            A = np.array([front_angs, [1]*len(front_angs)]).T
-            x_hat = np.dot(np.linalg.inv(np.dot(A.T, A)), np.dot(A.T, msg.ranges[ix1:ix2]))
-            lsq_ranges = np.dot(A, x_hat)
-            low_mean_min = np.mean(sorted(lsq_ranges)[:(ix2-ix1)//2])
-            del A, x_hat, lsq_ranges, ix1, ix2
+            rospy.loginfo("ix1: " + str(ix1) + " ix2: " + str(ix2) + "\n")
+            f = np.poly1d(np.polyfit(front_angs, msg.ranges[ix1:ix2], deg=1))
+            low_mean_min = np.mean(f(front_angs)[:(ix2-ix1)//2])
+
             if low_mean_min > self.lookahead:
                 print(self.angles[i])
                 break
             else:
                 ix1, ix2, front_angs = self.get_index(-self.angles_plus[i], -self.angles_minus[i], msg.angle_min, msg.angle_increment)
                 A = np.array([front_angs, [1]*len(front_angs)]).T
-                x_hat = np.dot(np.linalg.inv(np.dot(A.T, A)), np.dot(A.T, msg.ranges[ix1:ix2]))
-                lsq_ranges = np.dot(A, x_hat)
-                low_mean_min = np.mean(sorted(lsq_ranges)[:(ix2-ix1)//2])
-                del A, x_hat, lsq_ranges, ix1, ix2
-                if low_mean_min > lookahead:
+                f = np.poly1d(np.polyfit(front_angs, msg.ranges[ix1:ix2], deg=1))
+                low_mean_min = np.mean(f(front_angs)[:(ix2-ix1)//2])
+                rospy.loginfo("ix1: " + str(ix1) + " ix2: " + str(ix2) + "\n")
+                if low_mean_min > self.lookahead:
                     print(self.angles[i])
                     break
         x_body = self.lookahead*np.sin(self.angles[i])
@@ -78,7 +76,8 @@ class PursuitAvoid(object):
     def scanCallback(self, msg):
         ranges = np.array(msg.ranges)
         if not self.scan_flag:
-            angle = np.arctan(1/self.lookahead)
+            # angle = np.arctan(1/self.lookahead)
+            angle = np.deg2rad(20)
             self.angles = np.linspace(0, msg.angle_max - angle, 50)
             self.angles_plus = self.angles + angle
             self.angles_minus = self.angles - angle
@@ -101,10 +100,11 @@ class PursuitAvoid(object):
             except UnboundLocalError:
                 #
                 # curvature = None
+                print("failed")
                 pass
 
-        if curvature:
-            curvature = self.get_curvature(curvature, msg)
+        if curvature is not None:
+            # curvature = self.get_curvature(curvature, msg)
             self.drive_msg.drive.speed = self.speed
             self.drive_msg.drive.steering_angle = curvature
             self.drive_pub.publish(self.drive_msg)
@@ -118,24 +118,24 @@ class PursuitAvoid(object):
     def trajectory_callback(self, msg):
         ''' Clears the currently followed trajectory, and loads the new one from the message
         '''
-	#rospy.loginfo('Start Traj callback')
+        rospy.loginfo('Start Traj callback')
 
         #print "Receiving new trajectory:", len(msg.poses), "points"
         self.trajectory.clear()
         self.trajectory.fromPoseArray(msg)
         self.trajectory.publish_viz(duration=0.0)
 
-        self.segment_num = min(len(msg.poses), 5000)
+        self.segment_num = max(len(msg.poses), 500)
 
         #Convert trajectory PoseArray to arr (line segment array)
         N = self.segment_num // (len(msg.poses) - 1)
         rospy.loginfo(N)
         self.arr = self.create_segment(msg.poses, N)
         self.arr_flag = 1
-        # rospy.loginfo(arr)
+        rospy.loginfo(self.arr)
 
     def odomCallback(self, msg):
-	#rospy.loginfo('Start Odom callback')
+        # rospy.loginfo('Start Odom callback')
 
         self.loc = np.array([msg.pose.pose.position.x, msg.pose.pose.position.y])
         self.quat = msg.pose.pose.orientation
@@ -227,96 +227,22 @@ class PursuitAvoid(object):
             t2 = (-b - np.sqrt(disc)) / (2.0 * a)
 
 
-	    delta_theta_1 = None
-	    delta_theta_2 = None
-
             if ((t1 < 1) & (t1 > 0)): #1st possible global frame intersection location
-                lookahead_global_1 = P1 + t1*V
+                lookahead_global = P1 + t1*V
+                break
 
-		lookahead_local_1 = lookahead_global_1 - loc
-   		(roll, pitch, yaw) = tf.transformations.euler_from_quaternion([quat.x,quat.y,quat.z,quat.w])
-		lookahead_theta = np.arctan2(lookahead_local_1[1], lookahead_local_1[0])
-		delta_theta_1 = lookahead_theta - yaw
-		if delta_theta_1 < -np.pi:
-			delta_theta_1 += 2*np.pi
-		if delta_theta_1 > np.pi:
-			delta_theta_1 -= 2*np.pi
+            elif ((t2 < 1) & (t2 > 0)): #2nd possible global frame intersection location
+                lookahead_global = P1 + t2*V
+                break
 
-                #break
-            if ((t2 < 1) & (t2 > 0)): #2nd possible global frame intersection location
-                lookahead_global_2 = P1 + t2*V
-                #break
-
-		lookahead_local_2 = lookahead_global_2 - loc
+		lookahead_local = lookahead_global - loc
 		(roll, pitch, yaw) = tf.transformations.euler_from_quaternion([quat.x,quat.y,quat.z,quat.w])
-		lookahead_theta = np.arctan2(lookahead_local_2[1], lookahead_local_2[0])
-		delta_theta_2 = lookahead_theta - yaw
-
-		if delta_theta_2 < -np.pi:
-			delta_theta_2 += 2*np.pi
-		if delta_theta_2 > np.pi:
-			delta_theta_2 -= 2*np.pi
-
-	    #Expecting delta theta values to be -3.1 to 3.1, with 0 being right on
-	    #rospy.loginfo('delta_theta_1')
-	    #rospy.loginfo(delta_theta_1)
-
-	    #rospy.loginfo('delta_theta_2')
-	    #rospy.loginfo(delta_theta_2)
-
-	    #If both exist, must be ix_min, so choose the theta more in car's direction
-	    if delta_theta_1 and delta_theta_2:
-		if abs(delta_theta_1) < abs(delta_theta_2):
-			delta_theta = delta_theta_1
-			break
-		else:
-			delta_theta = delta_theta_2
-			break
-
-	    #If one exists, if it's within a 90 deg swath either way, use it.  Otherwise next segment.
-	    elif delta_theta_1:
-		if abs(delta_theta_1) < np.pi/2:
-			delta_theta = delta_theta_1
-			break
-		else:
-			continue
-
-	    #If one exists
-	    elif delta_theta_2:
-		if abs(delta_theta_2) < np.pi/2:
-			delta_theta = delta_theta_2
-			break
-		else:
-			continue
-
-	    #If no intersection exists, go to next segment
-	    else:
-		continue
-
-
-		#self.robotMarker.pose.position.x = lookahead_global_1[0]
-		#self.robotMarker.pose.position.y = lookahead_global_1[1]
-		#self.markerPub.publish(self.robotMarker)
-
-		#rospy.loginfo('aim point global 1:')
-		#rospy.loginfo(lookahead_global_1)
-
-
-
-	#rospy.loginfo('delta_theta')
-	#rospy.loginfo(delta_theta)
-
-
-	rad_curvature = 0.5 * L_dist / np.sin(delta_theta) #Rad. of curvature needed to hit lookahead point
-	curvature = np.arctan(self.wheelbase_length / rad_curvature)
-
-	#rospy.loginfo('curvature')
-	#rospy.loginfo(curvature)
-
-
-        if debug:
-            return lookahead_global, curvature
-        return curvature, delta_theta #- np.pi
+        R = np.array([[np.cos(yaw), np.sin(yaw)],
+                    [-np.sin(yaw), np.cos(yaw)]])
+        r_track = L_dist**2/np.dot(R, lookahead_local)[0]
+        curvature = np.arctan2(self.wheelbase_length, r_track)
+        rospy.loginfo(curvature)
+        return curvature
 
 
 if __name__=="__main__":

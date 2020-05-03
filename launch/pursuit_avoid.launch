@@ -1,5 +1,5 @@
 <launch>
-	<node pkg="lab6" type="pursuit_avoid.py" name="pursuit_avoid">
+	<node pkg="lab6" type="pursuit_avoid.py" name="pursuit_avoid" output="screen">
 		<param name="odom_topic" value="/pf/pose/odom"/>
 	</node>
 </launch>
