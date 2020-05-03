@@ -34,12 +34,12 @@ class PathPlan(object):
         #self.CW_rotation_matrix = []
         
         # SUBSCRIBERS and PUBLISHERS
-        self.odom_topic = rospy.get_param("~odom_topic")
+        #self.odom_topic = rospy.get_param("~odom_topic")
         self.map_sub = rospy.Subscriber("/map", OccupancyGrid, self.map_cb)
         self.trajectory = LineTrajectory("/planned_trajectory")
         self.goal_sub = rospy.Subscriber("/move_base_simple/goal", PoseStamped, self.goal_cb, queue_size=10)
         self.traj_pub = rospy.Publisher("/trajectory/current", PoseArray, queue_size=10)
-        self.odom_sub = rospy.Subscriber(self.odom_topic, Odometry, self.odom_cb)
+        self.odom_sub = rospy.Subscriber("/tesse/odom", Odometry, self.odom_cb)
        
 
     def map_cb(self, msg):
@@ -70,8 +70,8 @@ class PathPlan(object):
         self.g_map = signal.convolve2d(self.g_map, kernel)
 
         # VISUALIZING THE MAP - only for debugging
-        #plt.imshow(self.g_map)
-        #plt.show()
+        plt.imshow(self.g_map)
+        plt.show()
   
     def odom_cb(self, msg):
         x_0 = msg.pose.pose.position.x
@@ -114,8 +114,8 @@ class PathPlan(object):
         start = (int(start_d[0]),int(start_d[1]))
         goal = (int(goal_d[0]), int(goal_d[1]))
         
-        #print("start = " + str(start))
-        #print("goal = "+ str(goal))
+        print("start = " + str(start))
+        print("goal = "+ str(goal))
 
         # Using L-2 norm distance... maybe manhatan would be better?
         def heuristic(location):

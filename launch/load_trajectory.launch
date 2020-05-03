@@ -1,6 +1,6 @@
 <launch>
 	<node pkg="lab6" type="trajectory_loader.py" name="Trajectory_loader">
-		<param name="trajectory" value="$(find lab6)/trajectories/loop2.traj"/>
+		<param name="trajectory" value="$(find lab6)/trajectories/avoid_path.traj"/>
 		<param name="test_trajectory" value="$(find lab6)/trajectories/2020-04-20-15-13-56.traj"/>
 	</node>
 </launch>
