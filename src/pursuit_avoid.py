@@ -19,10 +19,10 @@ class PursuitAvoid(object):
     def __init__(self):
         self.odom_topic       = "/pf/pose/odom"
         self.lookahead        = 20# FILL IN #
-        self.speed            = 5# FILL IN #
+        self.speed            = 2.5# FILL IN #
         # self.wrap             = 0# FILL IN #
-        self.wheelbase_length = 1.5# Guess #
-	
+        self.wheelbase_length = 2.5# Guess #
+
         # self.trajectory  = utils.LineTrajectory("/followed_trajectory")
         # self.traj_sub = rospy.Subscriber("/trajectory/current", PoseArray, self.trajectory_callback, queue_size=1)
 
@@ -32,7 +32,7 @@ class PursuitAvoid(object):
         self.trajectory  = utils.LineTrajectory("/followed_trajectory")
         self.trajectory.load(self.path)
         #self.segment_num = max(len(self.trajectory.points), 10)
-	self.segment_num = max(len(self.trajectory.points), 500)
+        self.segment_num = max(len(self.trajectory.points), 500)
 
         #Convert trajectory PoseArray to arr (line segment array)
         N = self.segment_num // (len(self.trajectory.points) - 1)
@@ -41,15 +41,15 @@ class PursuitAvoid(object):
         self.arr_flag = 1
         #rospy.loginfo(self.arr)
         #***********************************************************************************************************
-	
+
         self.drive_pub = rospy.Publisher("/tesse/drive", AckermannDriveStamped, queue_size=1)
         self.drive_msg = AckermannDriveStamped()
 
-        rospy.Subscriber(self.odom_topic, Odometry, self.odomCallback)
+        self.odom_sub = rospy.Subscriber(self.odom_topic, Odometry, self.odomCallback)
         rospy.Subscriber("/tesse/hood_lidar/scan", LaserScan, self.scanCallback)
         # self.segment_num = 1
 
-        self.arr_flag = 0
+        # self.arr_flag = 0
         self.odom_flag = 0
         self.scan_flag = 0
 
@@ -122,12 +122,12 @@ class PursuitAvoid(object):
 
         if curvature is not None:
             # curvature = self.get_curvature(curvature, msg)
-            self.drive_msg.drive.speed = self.speed
+            self.drive_msg.drive.speed = 1.0 #self.speed
             self.drive_msg.drive.steering_angle = curvature
             self.drive_pub.publish(self.drive_msg)
         else:
             # self.lookahead = self.lookahead**1.2
-            self.drive_msg.drive.speed = 5
+            self.drive_msg.drive.speed = 0
             self.drive_msg.drive.steering_angle = 0
             self.drive_pub.publish(self.drive_msg)
 
@@ -221,8 +221,8 @@ class PursuitAvoid(object):
 
 
     def find_lookahead(self, arr, ix_min, loc, quat, L_dist, debug=False):
-	rospy.loginfo('ix_min')
-	rospy.loginfo(ix_min)
+	# rospy.loginfo('ix_min')
+	# rospy.loginfo(ix_min)
 
 
         for i in range(ix_min, arr.shape[0], 1):
@@ -231,9 +231,10 @@ class PursuitAvoid(object):
             P1 = arr[i, 0, :]      # Start of line segment
             V = arr[i, 1, :] - P1  # Line segment vector (the endpoint if starts at origin)
 
-	    a = V.dot(V)
+            a = V.dot(V)
             b = 2 * V.dot(P1 - Q)
             c = P1.dot(P1) + Q.dot(Q) - 2 * P1.dot(Q) - r**2
+
 
             disc = b**2 - 4 * a * c
             if disc < 0:
@@ -243,8 +244,9 @@ class PursuitAvoid(object):
             t1 = (-b + np.sqrt(disc)) / (2.0 * a)
             t2 = (-b - np.sqrt(disc)) / (2.0 * a)
 
-
+            # rospy.loginfo("t1: " + str(t1) + " t2: " + str(t2) + "\n" )
             if ((t1 < 1) & (t1 > 0)): #1st possible global frame intersection location
+
                 lookahead_global = P1 + t1*V
                 break
 
@@ -252,14 +254,24 @@ class PursuitAvoid(object):
                 lookahead_global = P1 + t2*V
                 break
 
-		lookahead_local = lookahead_global - loc
-		(roll, pitch, yaw) = tf.transformations.euler_from_quaternion([quat.x,quat.y,quat.z,quat.w])
-        R = np.array([[np.cos(yaw), np.sin(yaw)],
-                    [-np.sin(yaw), np.cos(yaw)]])
-        r_track = L_dist**2/np.dot(R, lookahead_local)[0]
-        curvature = np.arctan2(self.wheelbase_length, r_track)
+        lookahead_local = lookahead_global - loc
+
+        roll, pitch, yaw = tf.transformations.euler_from_quaternion([quat.x,quat.y,quat.z,quat.w])
+        yaw = yaw - np.pi/2
+        R = np.array([[np.cos(yaw), np.sin(yaw)], \
+                [-np.sin(yaw), np.cos(yaw)]])
+        # rospy.loginfo(R)
+        # rospy.loginfo(lookahead_local)
+        # self.odom_sub.unregister()
+        rospy.loginfo("here")
+        r_track = (L_dist**2)/np.dot(R, lookahead_local)[0]
+        # rospy.loginfo("here")
+        curvature = np.arctan(self.wheelbase_length/r_track)
         rospy.loginfo(curvature)
         return curvature
+
+
+
 
 
 if __name__=="__main__":
