@@ -1,10 +1,12 @@
 #!/usr/bin/env python
 
 import rospy
+import rospkg
 import numpy as np
 import time
 import utils
 import tf
+import os
 
 from geometry_msgs.msg import PoseArray, PoseStamped
 from visualization_msgs.msg import Marker
@@ -28,7 +30,9 @@ class PursuitAvoid(object):
 
        #**********************************************************************************************************
         self.path = rospy.get_param("~race_trj")
-	#self.path = rospy.get_param("~avoid_trj")
+        rospack = rospkg.RosPack()
+        self.lab6_path = rospack.get_path("lab6")
+        # self.path = rospy.get_param("~avoid_trj")
         self.trajectory  = utils.LineTrajectory("/followed_trajectory")
         self.trajectory.load(self.path)
         #self.segment_num = max(len(self.trajectory.points), 10)
@@ -53,6 +57,17 @@ class PursuitAvoid(object):
         self.odom_flag = 0
         self.scan_flag = 0
 
+        self.steering_angle_arr = []
+        self.previous_steering = 0
+        self.steering_angle_dt = []
+        self.time_now = time.clock()
+        rospy.on_shutdown(self.save_arrays)
+
+    def save_arrays(self):
+        np.savetxt(os.path.join(self.lab6_path +"/src/steering.txt"), np.array(self.steering_angle_arr))
+        np.savetxt(os.path.join(self.lab6_path +"/src/steering_dt.txt"), np.array(self.steering_angle_dt))
+
+
     def get_index(self, angle1, angle2, angle_min, angle_increment):
         k1 = int ((angle1 - angle_min )/ angle_increment)
         k2 = int ((angle2 - angle_min )/ angle_increment)
@@ -67,26 +82,28 @@ class PursuitAvoid(object):
     def get_curvature(self, curvature, msg):
         for i in range(self.find_nearest(curvature), len(self.angles)):
             ix1, ix2, front_angs = self.get_index(self.angles_minus[i], self.angles_plus[i], msg.angle_min, msg.angle_increment)
-            rospy.loginfo("ix1: " + str(ix1) + " ix2: " + str(ix2) + "\n")
+            # rospy.loginfo("ix1: " + str(ix1) + " ix2: " + str(ix2) + "\n")
             f = np.poly1d(np.polyfit(front_angs, msg.ranges[ix1:ix2], deg=1))
             low_mean_min = np.mean(sorted(f(front_angs))[:(ix2-ix1)//2])
 
             if low_mean_min > self.lookahead:
-                print(self.angles[i])
+                # print(self.angles[i])
                 break
             else:
                 ix1, ix2, front_angs = self.get_index(-self.angles_plus[i], -self.angles_minus[i], msg.angle_min, msg.angle_increment)
                 A = np.array([front_angs, [1]*len(front_angs)]).T
                 f = np.poly1d(np.polyfit(front_angs, msg.ranges[ix1:ix2], deg=1))
                 low_mean_min = np.mean(sorted(f(front_angs))[:(ix2-ix1)//2])
-                rospy.loginfo("ix1: " + str(ix1) + " ix2: " + str(ix2) + "\n")
+                # rospy.loginfo("ix1: " + str(ix1) + " ix2: " + str(ix2) + "\n")
                 if low_mean_min > self.lookahead:
-                    print(self.angles[i])
                     break
+        # print("angle: ", self.angles[i], "mean: ", low_mean_min, "\n")
         x_body = self.lookahead*np.sin(self.angles[i])
         y_body = self.lookahead*np.cos(self.angles[i])
-        R_track = 2*x_body/ self.lookahead**2
-        curvature = np.arctan(self.wheelbase_length/R_track)
+        R_track = self.lookahead**2/(2*x_body)
+        # if np.isclose(R_track, 0.0, atol=0.5):
+        #     curvature = 0
+        curvature = np.arctan(self.wheelbase_length/R_track) #- np.pi/2
         del R_track, x_body, y_body
         return curvature
 
@@ -95,7 +112,7 @@ class PursuitAvoid(object):
         if not self.scan_flag:
             # angle = np.arctan(1/self.lookahead)
             angle = np.deg2rad(20)
-            self.angles = np.linspace(0, msg.angle_max - angle, 50)
+            self.angles = np.linspace(msg.angle_min+angle, msg.angle_max - angle, 50)
             self.angles_plus = self.angles + angle
             self.angles_minus = self.angles - angle
             del angle
@@ -121,13 +138,24 @@ class PursuitAvoid(object):
                 pass
 
         if curvature is not None:
+            # rospy.loginfo("initial curvature: " + str(curvature))
             # curvature = self.get_curvature(curvature, msg)
-            self.drive_msg.drive.speed = 1.0 #self.speed
-            self.drive_msg.drive.steering_angle = curvature
+            self.get_curvature(curvature, msg)
+            # self.steering_angle_arr.append(curvature)
+            dt = time.clock()-self.time_now
+            # self.steering_angle_dt.append((curvature - self.previous_steering) / dt)
+
+
+            self.drive_msg.drive.speed = 2.0 #self.speed
+            self.drive_msg.drive.steering_angle = curvature #0.8*curvature + 0.017 *(curvature - self.previous_steering) /dt
             self.drive_pub.publish(self.drive_msg)
+
+            if not np.isclose((self.previous_steering - curvature)/dt, 0, 0.1):
+                self.previous_steering = curvature
+                self.time_now = time.clock()
         else:
             # self.lookahead = self.lookahead**1.2
-            self.drive_msg.drive.speed = 0
+            self.drive_msg.drive.speed = 0.0
             self.drive_msg.drive.steering_angle = 0
             self.drive_pub.publish(self.drive_msg)
 
@@ -263,11 +291,11 @@ class PursuitAvoid(object):
         # rospy.loginfo(R)
         # rospy.loginfo(lookahead_local)
         # self.odom_sub.unregister()
-        rospy.loginfo("here")
+        # rospy.loginfo("here")
         r_track = (L_dist**2)/np.dot(R, lookahead_local)[0]
         # rospy.loginfo("here")
         curvature = np.arctan(self.wheelbase_length/r_track)
-        rospy.loginfo(curvature)
+        # rospy.loginfo(curvature)
         return curvature
 
 
