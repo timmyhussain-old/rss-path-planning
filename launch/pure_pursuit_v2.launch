@@ -1,0 +1,7 @@
+<launch>
+	<node pkg="lab6" type="pure_pursuit_v2.py" name="pure_pursuit_v2" output="screen">
+		<param name="avoid_trj" value="$(find lab6)/trajectories/avoid_path.traj"/>
+		<param name="race_trj" value="$(find lab6)/trajectories/race_path.traj"/>
+		<param name="odom_topic" value="/pf/pose/odom"/>
+	</node>
+</launch>
