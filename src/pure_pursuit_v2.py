@@ -80,7 +80,7 @@ class PursuitAvoid(object):
 	
 	    theta_pow = np.power(self.thetas, 2.5)
 
-	    self.speed = max(8, 45 - np.mean(theta_pow)*130)
+	    self.speed = max(8, 48 - np.mean(theta_pow)*130)
 
 	    lookahead = max(5, self.speed * 1.7)
 	    lookahead = min(lookahead, 24)
