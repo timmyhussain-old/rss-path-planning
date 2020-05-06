@@ -35,8 +35,8 @@ class PursuitAvoid(object):
         # self.path = rospy.get_param("~avoid_trj
         # self.path = os.path.join(self.lab6_path+"/trajectories/2020-05-06-05-57-52.traj") #fave path 2
         # self.path = os.path.join(self.lab6_path+"/trajectories/2020-05-06-08-38-22.traj") #fave path 1 maybe
-        self.path = os.path.join(self.lab6_path+"/trajectories/2020-05-06-11-49-02.traj")
-        # self.path = os.path.join(self.lab6_path+"/trajectories/2020-05-06-13-38-42.traj")
+        # self.path = os.path.join(self.lab6_path+"/trajectories/2020-05-06-11-49-02.traj")
+        self.path = os.path.join(self.lab6_path+"/trajectories/2020-05-06-14-07-14.traj")
         self.trajectory  = utils.LineTrajectory("/followed_trajectory")
         self.trajectory.load(self.path)
         self.segment_num = max(len(self.trajectory.points), 100)
@@ -146,7 +146,7 @@ class PursuitAvoid(object):
 
             speed = 1.0
 
-            r = zero_thresh * 1.4
+            r = zero_thresh * 0.9
             x_body = r*np.cos(np.deg2rad(40))
             # y_body = r*np.sin(np.deg2rad(30))
             R_track = r**2/(2*x_body)
