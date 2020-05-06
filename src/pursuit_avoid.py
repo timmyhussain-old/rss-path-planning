@@ -33,8 +33,9 @@ class PursuitAvoid(object):
         rospack = rospkg.RosPack()
         self.lab6_path = rospack.get_path("lab6")
         # self.path = rospy.get_param("~avoid_trj
-        self.path = os.path.join(self.lab6_path+"/trajectories/2020-05-06-05-57-52.traj") #fave path 2
-        self.path = os.path.join(self.lab6_path+"/trajectories/2020-05-06-08-38-22.traj") #fave path 1 maybe
+        # self.path = os.path.join(self.lab6_path+"/trajectories/2020-05-06-05-57-52.traj") #fave path 2
+        # self.path = os.path.join(self.lab6_path+"/trajectories/2020-05-06-08-38-22.traj") #fave path 1 maybe
+        self.path = os.path.join(self.lab6_path+"/trajectories/2020-05-06-11-49-02.traj")
         self.trajectory  = utils.LineTrajectory("/followed_trajectory")
         self.trajectory.load(self.path)
         self.segment_num = max(len(self.trajectory.points), 100)
@@ -132,19 +133,19 @@ class PursuitAvoid(object):
         low_mean_right = np.mean(sorted(fright(front_angs))[:(ix2-ix1)//6])
 
         rospy.loginfo(low_mean_min)
-        speed = 15.0
-        if self.speed > 10.0:
-            zero_thresh, side_thresh = 30, 8
+        speed = 13.0
+        # if self.speed > 10.0:
+        zero_thresh, side_thresh = 30, 8
 
-        elif self.speed < 10.0:
-            zero_thresh, side_thresh = 25, 8
-        else:
-            zero_thresh, side_thresh = 10, 5
+        # elif 5.0 < self.speed < 10.0:
+        #     zero_thresh, side_thresh = 25, 8
+        # else:
+        #     zero_thresh, side_thresh = 10, 5
         if (front_thin + self.speed * 1.5 < zero_thresh) or ((curvature < 0)*low_mean_left + (curvature > 0)*low_mean_right < side_thresh):
 
-            speed = 5.0
+            speed = 1.0
 
-            r = zero_thresh * 1.3
+            r = zero_thresh * 1.4
             x_body = r*np.cos(np.deg2rad(40))
             # y_body = r*np.sin(np.deg2rad(30))
             R_track = r**2/(2*x_body)
@@ -156,16 +157,17 @@ class PursuitAvoid(object):
             # else:
 
 
-            if np.random.random() > 0.9:
-                self.avoid_direction = ((low_mean_right > low_mean_left)*-1 + (low_mean_right < low_mean_left)*1)
-            else:
-                self.avoid_direction = np.sign(curvature)
+            # if np.random.random() > 0.9:
+            self.avoid_direction = ((low_mean_right > low_mean_left)*-1 + (low_mean_right < low_mean_left)*1)
+            # else:
+            #     self.avoid_direction = np.sign(curvature)
             #     self.obstacle_detected = 1
             #     self.obstacle_timer = time.time()
             curvature =  self.avoid_direction * np.arctan(self.wheelbase_length/R_track)
             if front_thin < 1.0:
-                # speed = 1.0
                 speed = 1.0
+                # speed = -1.0
+                # curvature = 0
                 curvature = 2*curvature
             # if (time.time() - self.obstacle_timer > 2.0):
             #     self.obstacle_detected = 0
@@ -201,7 +203,7 @@ class PursuitAvoid(object):
             except UnboundLocalError:
                 #
                 # curvature = None
-                print("failed")
+                # print("failed")
                 pass
 
 
