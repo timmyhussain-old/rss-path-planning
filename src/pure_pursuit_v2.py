@@ -20,7 +20,7 @@ class PursuitAvoid(object):
     """
     def __init__(self):
         self.odom_topic       = "/pf/pose/odom"
-        self.lookahead        = 30# FILL IN #
+        self.lookahead        = 10# FILL IN #
         self.speed            = 30 # FILL IN #
         # self.wrap             = 0# FILL IN #
         self.wheelbase_length = 2.5# Guess #
@@ -36,8 +36,8 @@ class PursuitAvoid(object):
         self.trajectory  = utils.LineTrajectory("/followed_trajectory")
         # self.trajectory.publish_trajectory()
         self.trajectory.load(self.path)
-        self.trajectory.load(os.path.join(self.lab6_path+"/trajectories/2020-05-05-13-18-57.traj"))
-        self.segment_num = max(len(self.trajectory.points), 500)
+        self.trajectory.load(os.path.join(self.lab6_path+"/trajectories/race_path.traj"))
+        self.segment_num = max(len(self.trajectory.points), 1000)
 
         #Convert trajectory PoseArray to arr (line segment array)
         N = self.segment_num // (len(self.trajectory.points) - 1)
@@ -51,6 +51,9 @@ class PursuitAvoid(object):
 
         self.odom_sub = rospy.Subscriber(self.odom_topic, Odometry, self.odomCallback)
         self.last_ix = 0
+	self.last_lookahead = 0
+
+	self.thetas = []
 
         self.steering_angle_arr = []
         self.previous_steering = 0
@@ -73,8 +76,22 @@ class PursuitAvoid(object):
         rospy.loginfo(ix_min)
         self.last_ix = ix_min
         try:
+	    self.thetas = self.find_lookahead_thetas(self.arr, ix_min, self.loc, self.quat, [10, 55])
+	
+	    theta_pow = np.power(self.thetas, 2.5)
 
-            curvature = self.find_lookahead(self.arr, ix_min, self.loc, self.quat, self.lookahead) #curvature (steering angle) in global frame
+	    self.speed = max(8, 45 - np.mean(theta_pow)*130)
+
+	    lookahead = max(5, self.speed * 1.7)
+	    lookahead = min(lookahead, 24)
+	    lookahead = (lookahead + 3*self.last_lookahead)/4 #speed doesn't change instantly, so lookahead shouldn't
+
+	    self.last_lookahead = lookahead
+
+	    rospy.loginfo("lookahead: %f", lookahead)
+	    rospy.loginfo("speed: %f", self.speed)
+
+            curvature = self.find_lookahead(self.arr, ix_min, self.loc, self.quat, lookahead) #curvature (steering angle) in global frame
 
         except UnboundLocalError:
             #
@@ -91,8 +108,11 @@ class PursuitAvoid(object):
                 #     self.drive_msg.drive.speed = 10
                 #     self.drive_msg.drive.steering_angle = 0.2*curvature +  0.08*(curvature - self.previous_steering)/delt
                 # else:
+		
                 self.drive_msg.drive.speed = self.speed
+		
                 self.drive_msg.drive.steering_angle = 0.08*curvature +  0.002*(curvature - self.previous_steering)/delt
+
                 self.drive_pub.publish(self.drive_msg)
                 self.steering_angle_arr.append(self.drive_msg.drive.steering_angle)
                 # self.previous_steering =
@@ -215,7 +235,7 @@ class PursuitAvoid(object):
         R = np.array([[np.cos(yaw), np.sin(yaw)], \
                 [-np.sin(yaw), np.cos(yaw)]])
         # rospy.loginfo(R)
-        # rospy.loginfo(lookahead_local)
+        #rospy.loginfo(np.dot(R, lookahead_local))
         # self.odom_sub.unregister()
         # rospy.loginfo("here")
         r_track = (L_dist**2)/np.dot(R, lookahead_local)[0]
@@ -226,6 +246,56 @@ class PursuitAvoid(object):
 
 
 
+    def find_lookahead_thetas(self, arr, ix_min, loc, quat, L_dists, debug=False):
+	# rospy.loginfo('ix_min')
+	# rospy.loginfo(ix_min)
+
+	thetas = []
+
+	for L_dist in L_dists:
+
+		for i in range(ix_min, arr.shape[0], 1):
+		    Q = loc                # Centre of circle is vehicle location
+		    r = L_dist             # Radius of circle is lookahead distance
+		    P1 = arr[i, 0, :]      # Start of line segment
+		    V = arr[i, 1, :] - P1  # Line segment vector (the endpoint if starts at origin)
+
+		    a = V.dot(V)
+		    b = 2 * V.dot(P1 - Q)
+		    c = P1.dot(P1) + Q.dot(Q) - 2 * P1.dot(Q) - r**2
+
+		    disc = b**2 - 4 * a * c
+		    if disc < 0:
+		        continue #circle doesn't intersect this line segment, try next one
+
+		    #Fractions along the line segment where circle intersects
+		    t1 = (-b + np.sqrt(disc)) / (2.0 * a)
+		    t2 = (-b - np.sqrt(disc)) / (2.0 * a)
+
+		    # rospy.loginfo("t1: " + str(t1) + " t2: " + str(t2) + "\n" )
+		    if ((t1 < 1) & (t1 > 0)): #1st possible global frame intersection location
+
+		        lookahead_global = P1 + t1*V
+		        break
+
+		    elif ((t2 < 1) & (t2 > 0)): #2nd possible global frame intersection location
+		        lookahead_global = P1 + t2*V
+		        break
+
+		lookahead_local = lookahead_global - loc
+
+		roll, pitch, yaw = tf.transformations.euler_from_quaternion([quat.x,quat.y,quat.z,quat.w])
+		yaw = yaw - np.pi/2
+		R = np.array([[np.cos(yaw), np.sin(yaw)], \
+		        [-np.sin(yaw), np.cos(yaw)]])
+	 
+		rel_lookahead_point = np.dot(R, lookahead_local)
+		theta = abs(np.arctan2(rel_lookahead_point[0], rel_lookahead_point[1]))
+		thetas.append(theta)
+	
+	rospy.loginfo(thetas)
+
+        return thetas
 
 
 if __name__=="__main__":
