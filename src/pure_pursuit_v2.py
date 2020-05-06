@@ -88,8 +88,8 @@ class PursuitAvoid(object):
 
 	    self.last_lookahead = lookahead
 
-	    rospy.loginfo("lookahead: %f", lookahead)
-	    rospy.loginfo("speed: %f", self.speed)
+	    #rospy.loginfo("lookahead: %f", lookahead)
+	    #rospy.loginfo("speed: %f", self.speed)
 
             curvature = self.find_lookahead(self.arr, ix_min, self.loc, self.quat, lookahead) #curvature (steering angle) in global frame
 
@@ -293,7 +293,7 @@ class PursuitAvoid(object):
 		theta = abs(np.arctan2(rel_lookahead_point[0], rel_lookahead_point[1]))
 		thetas.append(theta)
 	
-	rospy.loginfo(thetas)
+	#rospy.loginfo(thetas)
 
         return thetas
 
