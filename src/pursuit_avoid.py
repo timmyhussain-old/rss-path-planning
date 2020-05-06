@@ -23,7 +23,7 @@ class PursuitAvoid(object):
         self.lookahead        = 40# FILL IN #
         self.speed            = 2.5# FILL IN #
         # self.wrap             = 0# FILL IN #
-        self.wheelbase_length = 2.5# Guess #
+        self.wheelbase_length = 2.5 # Guess #
 
         # self.trajectory  = utils.LineTrajectory("/followed_trajectory")
         # self.traj_sub = rospy.Subscriber("/trajectory/current", PoseArray, self.trajectory_callback, queue_size=1)
@@ -32,17 +32,19 @@ class PursuitAvoid(object):
         # self.path = rospy.get_param("~race_trj")
         rospack = rospkg.RosPack()
         self.lab6_path = rospack.get_path("lab6")
-        self.path = rospy.get_param("~avoid_trj")
+        # self.path = rospy.get_param("~avoid_trj
+        self.path = os.path.join(self.lab6_path+"/trajectories/2020-05-06-05-57-52.traj") #fave path 2
+        self.path = os.path.join(self.lab6_path+"/trajectories/2020-05-06-08-38-22.traj") #fave path 1 maybe
         self.trajectory  = utils.LineTrajectory("/followed_trajectory")
         self.trajectory.load(self.path)
-        #self.segment_num = max(len(self.trajectory.points), 10)
-        self.segment_num = max(len(self.trajectory.points), 5000)
+        self.segment_num = max(len(self.trajectory.points), 100)
+        # self.segment_num = max(len(self.trajectory.points), 500)
 
         #Convert trajectory PoseArray to arr (line segment array)
         N = self.segment_num // (len(self.trajectory.points) - 1)
         rospy.loginfo(N)
         self.arr = self.create_segment(self.trajectory.toPoseArray().poses, N)
-        self.arr_flag = 1
+        # self.arr_flag = 1
         #rospy.loginfo(self.arr)
         #***********************************************************************************************************
 
@@ -57,15 +59,19 @@ class PursuitAvoid(object):
         self.odom_flag = 0
         self.scan_flag = 0
 
-        self.steering_angle_arr = []
+        # self.steering_angle_arr = []
         self.previous_steering = 0
-        self.steering_angle_dt = []
+        # self.steering_angle_dt = []
         self.time_now = time.time()
+        self.obstacle_detected = 0
+        self.obstacle_timer = None
+        self.avoid_dir_lock = False
+        self.avoid_direction = 0
         # rospy.on_shutdown(self.save_arrays)
 
-    def save_arrays(self):
-        np.savetxt(os.path.join(self.lab6_path +"/src/steering.txt"), np.array(self.steering_angle_arr))
-        np.savetxt(os.path.join(self.lab6_path +"/src/steering_dt.txt"), np.array(self.steering_angle_dt))
+    # def save_arrays(self):
+    #     np.savetxt(os.path.join(self.lab6_path +"/src/steering.txt"), np.array(self.steering_angle_arr))
+    #     np.savetxt(os.path.join(self.lab6_path +"/src/steering_dt.txt"), np.array(self.steering_angle_dt))
 
 
     def get_index(self, angle1, angle2, angle_min, angle_increment):
@@ -80,47 +86,108 @@ class PursuitAvoid(object):
         return idx
 
     def get_curvature(self, curvature, msg):
-        for i in range(self.find_nearest(curvature), len(self.angles)):
-            ix1, ix2, front_angs = self.get_index(self.angles_minus[i], self.angles_plus[i], msg.angle_min, msg.angle_increment)
-            # rospy.loginfo("ix1: " + str(ix1) + " ix2: " + str(ix2) + "\n")
-            f = np.poly1d(np.polyfit(front_angs, msg.ranges[ix1:ix2], deg=1))
-            low_mean_min = np.mean(sorted(f(front_angs))[:(ix2-ix1)//2])
+        # curvature_ix = self.find_nearest(np.pi/2)
+        # if curvature < 0:
+        #     ordered_ix = sorted(self.ix[:curvature_ix], reverse=True) + self.ix[curvature_ix:].tolist()
+        # else:
+        #     ordered_ix = self.ix[curvature_ix:].tolist() + sorted(self.ix[:curvature_ix], reverse=True)
+        # for i in ordered_ix:
+        #     ix1, ix2, front_angs = self.get_index(self.angles_minus[i], self.angles_plus[i], msg.angle_min, msg.angle_increment)
+        #     # rospy.loginfo("ix1: " + str(ix1) + " ix2: " + str(ix2) + "\n")
+        #     f = np.poly1d(np.polyfit(front_angs, msg.ranges[ix1:ix2], deg=1))
+        #     low_mean_min = np.mean(sorted(f(front_angs))[:(ix2-ix1)//2])
+        #     rospy.loginfo(str(self.angles[i]) + "/" + str(np.rad2deg(self.angles[i]))+ ": " + str(low_mean_min))
+        #     print('---------------------------------------------------')
+        #     # time.sleep(1)
+        #     if low_mean_min > 10: #self.lookahead:
+        #         # print(self.angles[i])
+        #         break
+            # else:
+            #     ix1, ix2, front_angs = self.get_index(-self.angles_plus[i], -self.angles_minus[i], msg.angle_min, msg.angle_increment)
+            #     A = np.array([front_angs, [1]*len(front_angs)]).T
+            #     f = np.poly1d(np.polyfit(front_angs, msg.ranges[ix1:ix2], deg=1))
+            #     low_mean_min = np.mean(sorted(f(front_angs))[:(ix2-ix1)//2])
+            #     # rospy.loginfo("ix1: " + str(ix1) + " ix2: " + str(ix2) + "\n")
+            #     if low_mean_min > 10: #self.lookahead:
+            #         break
+        # rospy.loginfo(low_mean_min)
 
-            if low_mean_min > self.lookahead:
-                # print(self.angles[i])
-                break
+        ix1, ix2, front_angs = self.get_index(np.deg2rad(-30), np.deg2rad(30), msg.angle_min, msg.angle_increment)
+        # rospy.loginfo("ix1: " + str(ix1) + " ix2: " + str(ix2) + "\n")
+        z = np.polyfit(front_angs, msg.ranges[ix1:ix2], deg=1)
+        f = np.poly1d(z)
+        front_arr = f(front_angs)
+        front_thin = np.array_split(front_arr, 10)
+        front_thin = np.min([np.mean(i) for i in front_thin])
+        low_mean_min = np.mean(sorted(front_arr)[:(ix2-ix1)//6])
+
+        ix1, ix2, front_angs = self.get_index(np.deg2rad(-50), np.deg2rad(-25), msg.angle_min, msg.angle_increment)
+        z = np.polyfit(front_angs, msg.ranges[ix1:ix2], deg=1)
+        fleft = np.poly1d(z)
+        low_mean_left = np.mean(sorted(fleft(front_angs))[:(ix2-ix1)//6])
+
+        ix1, ix2, front_angs = self.get_index(np.deg2rad(25), np.deg2rad(50), msg.angle_min, msg.angle_increment)
+        z = np.polyfit(front_angs, msg.ranges[ix1:ix2], deg=1)
+        fright = np.poly1d(z)
+        low_mean_right = np.mean(sorted(fright(front_angs))[:(ix2-ix1)//6])
+
+        rospy.loginfo(low_mean_min)
+        speed = 15.0
+        if self.speed > 10.0:
+            zero_thresh, side_thresh = 30, 8
+
+        elif self.speed < 10.0:
+            zero_thresh, side_thresh = 25, 8
+        else:
+            zero_thresh, side_thresh = 10, 5
+        if (front_thin + self.speed * 1.5 < zero_thresh) or ((curvature < 0)*low_mean_left + (curvature > 0)*low_mean_right < side_thresh):
+
+            speed = 5.0
+
+            r = zero_thresh * 1.3
+            x_body = r*np.cos(np.deg2rad(40))
+            # y_body = r*np.sin(np.deg2rad(30))
+            R_track = r**2/(2*x_body)
+            # if self.correction:
+            #     curvature = np.sign(curvature) * np.arctan(self.wheelbase_length/R_track) #- np.pi/2
+            # elif np.sign(z[0]) == np.sign(curvature):
+            #     curvature = np.sign(z[0]) * np.arctan(self.wheelbase_length/R_track) #- np.pi/2
+            #     self.correction = 0
+            # else:
+
+
+            if np.random.random() > 0.9:
+                self.avoid_direction = ((low_mean_right > low_mean_left)*-1 + (low_mean_right < low_mean_left)*1)
             else:
-                ix1, ix2, front_angs = self.get_index(-self.angles_plus[i], -self.angles_minus[i], msg.angle_min, msg.angle_increment)
-                A = np.array([front_angs, [1]*len(front_angs)]).T
-                f = np.poly1d(np.polyfit(front_angs, msg.ranges[ix1:ix2], deg=1))
-                low_mean_min = np.mean(sorted(f(front_angs))[:(ix2-ix1)//2])
-                # rospy.loginfo("ix1: " + str(ix1) + " ix2: " + str(ix2) + "\n")
-                if low_mean_min > self.lookahead:
-                    break
-        # print("angle: ", self.angles[i], "mean: ", low_mean_min, "\n")
-        x_body = self.lookahead*np.sin(self.angles[i])
-        y_body = self.lookahead*np.cos(self.angles[i])
-        R_track = self.lookahead**2/(2*x_body)
-        # if np.isclose(R_track, 0.0, atol=0.5):
-        #     curvature = 0
-        curvature = np.arctan(self.wheelbase_length/R_track) #- np.pi/2
-        del R_track, x_body, y_body
-        return curvature
+                self.avoid_direction = np.sign(curvature)
+            #     self.obstacle_detected = 1
+            #     self.obstacle_timer = time.time()
+            curvature =  self.avoid_direction * np.arctan(self.wheelbase_length/R_track)
+            if front_thin < 1.0:
+                # speed = 1.0
+                speed = 1.0
+                curvature = 2*curvature
+            # if (time.time() - self.obstacle_timer > 2.0):
+            #     self.obstacle_detected = 0
+                # self.correction =1
+            # del R_track, x_body, y_body
+        return speed, curvature
 
     def scanCallback(self, msg):
         ranges = np.array(msg.ranges)
         if not self.scan_flag:
             # angle = np.arctan(1/self.lookahead)
-            angle = np.deg2rad(20)
+            angle = np.deg2rad(40)
             self.angles = np.linspace(msg.angle_min+angle, msg.angle_max - angle, 50)
             self.angles_plus = self.angles + angle
             self.angles_minus = self.angles - angle
+            self.ix = np.arange(len(self.angles))
             del angle
             self.scan_flag = 1
 
         curvature = None
 
-        if self.arr_flag and self.odom_flag:
+        if self.odom_flag:
             ix_min = self.find_closest_point(self.arr, self.loc) #Index of closest line segment on trajectory to the car
             try:
         	#rospy.loginfo('Start math')
@@ -136,32 +203,36 @@ class PursuitAvoid(object):
                 # curvature = None
                 print("failed")
                 pass
-        rospy.loginfo(curvature)
 
 
         if curvature is not None:
-            if abs(curvature) > 0.1:
-                self.lookahead = max(self.lookahead**1/1.3, 5)
-            else:
-                self.lookahead = min(self.lookahead**1.3, 40)
+            # if abs(curvature) > 0.1:
+            #     self.lookahead = max(self.lookahead**1/1.3, 5)
+            # else:
+            #     self.lookahead = min(self.lookahead**1.3, 40)
             # rospy.loginfo("initial curvature: " + str(curvature))
-            # curvature = self.get_curvature(curvature, msg)
-            self.get_curvature(curvature, msg)
+
+
+
+            # self.get_curvature(curvature, msg)
             # self.steering_angle_arr.append(curvature)
 
             # self.steering_angle_dt.append((curvature - self.previous_steering) / dt)
-            delt = 0.1
+            delt = 0.2
             if time.time()- self.time_now > delt:
                 dt = time.clock()-self.time_now
-                self.drive_msg.drive.speed = 8.0 #self.speed
+                speed, curvature = self.get_curvature(curvature, msg)
+                cmdangle = 0.1*curvature +  0.04*(curvature - self.previous_steering)/dt
+
+                self.drive_msg.drive.speed = speed #self.speed
                 # rospy.loginfo("curvature: " + str(curvature))
                 #
                 # rospy.loginfo(1.8*(curvature - self.previous_steering)/delt)
                 # rospy.loginfo('------------------------------------')
-                self.drive_msg.drive.steering_angle = 0.1*curvature +  0.08*(curvature - self.previous_steering)/delt
-                # self.drive_msg.drive.steering_angle = 1.8*(curvature - self.previous_steering)/delt #0.8*curvature + 0.017 *(curvature - self.previous_steering) /dt
+                self.drive_msg.drive.steering_angle = cmdangle
+                # self.drive_msg.drive.steering_angle = 0 #1.8*(curvature - self.previous_steering)/delt #0.8*curvature + 0.017 *(curvature - self.previous_steering) /dt
                 self.drive_pub.publish(self.drive_msg)
-                self.previous_steering = curvature
+                self.previous_steering = self.drive_msg.drive.steering_angle
                 self.time_now = time.time()
         else:
             # self.lookahead = self.lookahead**1.2
