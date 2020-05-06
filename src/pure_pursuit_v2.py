@@ -20,8 +20,8 @@ class PursuitAvoid(object):
     """
     def __init__(self):
         self.odom_topic       = "/pf/pose/odom"
-        self.lookahead        = 40# FILL IN #
-        self.speed            = 20 # FILL IN #
+        self.lookahead        = 30# FILL IN #
+        self.speed            = 30 # FILL IN #
         # self.wrap             = 0# FILL IN #
         self.wheelbase_length = 2.5# Guess #
 
@@ -31,9 +31,13 @@ class PursuitAvoid(object):
         #**********************************************************************************************************
         #load trajectory
         self.path = rospy.get_param("~race_trj")
+        rospack = rospkg.RosPack()
+        self.lab6_path = rospack.get_path("lab6")
         self.trajectory  = utils.LineTrajectory("/followed_trajectory")
+        # self.trajectory.publish_trajectory()
         self.trajectory.load(self.path)
-        self.segment_num = max(len(self.trajectory.points), 5000)
+        self.trajectory.load(os.path.join(self.lab6_path+"/trajectories/2020-05-05-13-18-57.traj"))
+        self.segment_num = max(len(self.trajectory.points), 500)
 
         #Convert trajectory PoseArray to arr (line segment array)
         N = self.segment_num // (len(self.trajectory.points) - 1)
@@ -46,10 +50,17 @@ class PursuitAvoid(object):
         self.drive_msg = AckermannDriveStamped()
 
         self.odom_sub = rospy.Subscriber(self.odom_topic, Odometry, self.odomCallback)
+        self.last_ix = 0
 
+        self.steering_angle_arr = []
         self.previous_steering = 0
         self.time_now = time.time()
-        # rospy.on_shutdown(self.save_arrays)
+        rospy.on_shutdown(self.save_arrays)
+
+
+    def save_arrays(self):
+        np.savetxt(os.path.join(self.lab6_path +"/src/steering.txt"), np.array(self.steering_angle_arr))
+        # np.savetxt(os.path.join(self.lab6_path +"/src/steering_dt.txt"), np.array(self.steering_angle_dt))
 
     def odomCallback(self, msg):
         # rospy.loginfo('Start Odom callback')
@@ -59,6 +70,8 @@ class PursuitAvoid(object):
 
         curvature = None
         ix_min = self.find_closest_point(self.arr, self.loc) #Index of closest line segment on trajectory to the car
+        rospy.loginfo(ix_min)
+        self.last_ix = ix_min
         try:
 
             curvature = self.find_lookahead(self.arr, ix_min, self.loc, self.quat, self.lookahead) #curvature (steering angle) in global frame
@@ -70,13 +83,20 @@ class PursuitAvoid(object):
             pass
 
         if curvature is not None:
-            delt = 0.1
+            delt = 0.2
             if time.time()- self.time_now > delt:
                 dt = time.clock()-self.time_now
+                # if (-53 < self.loc[0] < 1.65) and (80 < self.loc[1] < 153):
+                #     self.lookahead = 40
+                #     self.drive_msg.drive.speed = 10
+                #     self.drive_msg.drive.steering_angle = 0.2*curvature +  0.08*(curvature - self.previous_steering)/delt
+                # else:
                 self.drive_msg.drive.speed = self.speed
-                self.drive_msg.drive.steering_angle = 0.1*curvature +  0.08*(curvature - self.previous_steering)/delt
+                self.drive_msg.drive.steering_angle = 0.08*curvature +  0.002*(curvature - self.previous_steering)/delt
                 self.drive_pub.publish(self.drive_msg)
-                self.previous_steering = curvature
+                self.steering_angle_arr.append(self.drive_msg.drive.steering_angle)
+                # self.previous_steering =
+                self.previous_steering = self.drive_msg.drive.steering_angle
                 self.time_now = time.time()
         else:
             # self.lookahead = self.lookahead**1.2
@@ -136,7 +156,17 @@ class PursuitAvoid(object):
 
         dist_array = np.add(dx2_array, dy2_array) #array of dists from car location to closest point on all segments
 
-        ix_min = np.argmin(dist_array) #get the index of the line segment the point is closest to
+        # dist_ix = np.arange(len(dist_array))
+        # dist_ix = np.where(dist_ix - self.last_ix < 0, 10000, dist_ix)
+        # return np.argmin(dist_ix * dist_array)
+
+
+        ix_flag = 1
+        while ix_flag:
+            ix_min = np.argmin(dist_array) #get the index of the line segment the point is closest to
+            dist_array = np.delete(dist_array, ix_min)
+            if abs(ix_min - self.last_ix) < 100:
+                ix_flag = 0
 
         #Might not need this
         #closest_point = np.array([x_array[min_dist_idx], y_array[min_dist_idx]]) #get the point car is closest to
