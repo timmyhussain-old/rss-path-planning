@@ -24,7 +24,11 @@ class PursuitAvoid(object):
         self.speed            = 30 # FILL IN #
         # self.wrap             = 0# FILL IN #
         self.wheelbase_length = 2.5# Guess #
-
+	
+	# FOR TESTING ----------------------------------------------
+	#self.save_path = os.path.join(lab6_path+"/trajectories/", time.strftime("%Y-%m-%d-%H-%M-%S") + "-test.txt")
+	#-----------------------------------------------------------
+		
         # self.trajectory  = utils.LineTrajectory("/followed_trajectory")
         # self.traj_sub = rospy.Subscriber("/trajectory/current", PoseArray, self.trajectory_callback, queue_size=1)
 
@@ -41,7 +45,7 @@ class PursuitAvoid(object):
 
         #Convert trajectory PoseArray to arr (line segment array)
         N = self.segment_num // (len(self.trajectory.points) - 1)
-        rospy.loginfo(N)
+        #rospy.loginfo(N)
         self.arr = self.create_segment(self.trajectory.toPoseArray().poses, N)
         #rospy.loginfo(self.arr)
         #***********************************************************************************************************
@@ -73,7 +77,7 @@ class PursuitAvoid(object):
 
         curvature = None
         ix_min = self.find_closest_point(self.arr, self.loc) #Index of closest line segment on trajectory to the car
-        rospy.loginfo(ix_min)
+        #rospy.loginfo(ix_min)
         self.last_ix = ix_min
         try:
 	    self.thetas = self.find_lookahead_thetas(self.arr, ix_min, self.loc, self.quat, [10, 55])
@@ -96,7 +100,7 @@ class PursuitAvoid(object):
         except UnboundLocalError:
             #
             # curvature = None
-            print("too far from lookahead point")
+            #print("too far from lookahead point")
             pass
 
         if curvature is not None:
@@ -112,7 +116,8 @@ class PursuitAvoid(object):
                 self.drive_msg.drive.speed = self.speed
 		
                 self.drive_msg.drive.steering_angle = 0.08*curvature +  0.002*(curvature - self.previous_steering)/delt
-
+		
+		print(str(self.speed) + ";" + str(self.loc))
                 self.drive_pub.publish(self.drive_msg)
                 self.steering_angle_arr.append(self.drive_msg.drive.steering_angle)
                 # self.previous_steering =
@@ -122,6 +127,7 @@ class PursuitAvoid(object):
             # self.lookahead = self.lookahead**1.2
             self.drive_msg.drive.speed = 8.0
             self.drive_msg.drive.steering_angle = 0
+	    print(str(8.0) + ";" + str(self.loc))
             self.drive_pub.publish(self.drive_msg)
             #Publish curvature/steering angle and self.speed to "/drive"
 
